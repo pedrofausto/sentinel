@@ -198,6 +198,14 @@ export default function App() {
   const [analysisModalPirId, setAnalysisModalPirId] = useState<string | null>(null);
   const [disseminationModalPirId, setDisseminationModalPirId] = useState<string | null>(null);
 
+  const [confirmState, setConfirmState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isAlert?: boolean;
+  } | null>(null);
+
   const activeClient = useMemo(() => 
     clients.find(c => c.id === activeClientId) || null
   , [clients, activeClientId]);
@@ -339,11 +347,26 @@ export default function App() {
   };
 
   const handleDeleteOrg = (id: string) => {
-    if (clients.length <= 1) return alert("Deve haver pelo menos uma organização.");
-    if (window.confirm("Excluir organização e todos os dados CTI associados?")) {
-      setClients(prev => prev.filter(c => c.id !== id));
-      if (activeClientId === id) setActiveClientId(clients.filter(c => c.id !== id)[0]?.id || null);
+    if (clients.length <= 1) {
+      setConfirmState({
+        isOpen: true,
+        title: "Ação Inválida",
+        message: "Deve haver pelo menos uma organização.",
+        isAlert: true,
+        onConfirm: () => setConfirmState(null)
+      });
+      return;
     }
+    setConfirmState({
+      isOpen: true,
+      title: "Excluir Organização",
+      message: "Excluir organização e todos os dados CTI associados?",
+      onConfirm: () => {
+        setClients(prev => prev.filter(c => c.id !== id));
+        if (activeClientId === id) setActiveClientId(clients.filter(c => c.id !== id)[0]?.id || null);
+        setConfirmState(null);
+      }
+    });
   };
 
   const handleAddOrEditPir = (pir: Omit<PIR, 'id'>) => {
@@ -365,79 +388,103 @@ export default function App() {
 
   const handleDeletePir = (id: string) => {
     if (!activeClientId) return;
-    if (window.confirm("Excluir este PIR e TODOS os dados dependentes (fontes, análises, métricas e disseminações)?")) {
-      setClients(prev => prev.map(c => {
-        if (c.id !== activeClientId) return c;
-        return {
-          ...c,
-          phases: {
-            ...c.phases,
-            planning: { ...c.phases.planning, pirs: c.phases.planning.pirs.filter(p => p.id !== id) },
-            collection: { ...c.phases.collection, sources: c.phases.collection.sources.filter(s => s.pirId !== id) },
-            analysis: { ...c.phases.analysis, reports: c.phases.analysis.reports.filter(r => r.pirId !== id) },
-            dissemination: { ...c.phases.dissemination, logs: c.phases.dissemination.logs.filter(l => l.pirId !== id) }
-          },
-          metrics: c.metrics.filter(m => m.pirId !== id)
-        };
-      }));
-    }
+    setConfirmState({
+      isOpen: true,
+      title: "Excluir PIR",
+      message: "Excluir este PIR e TODOS os dados dependentes (fontes, análises, métricas e disseminações)?",
+      onConfirm: () => {
+        setClients(prev => prev.map(c => {
+          if (c.id !== activeClientId) return c;
+          return {
+            ...c,
+            phases: {
+              ...c.phases,
+              planning: { ...c.phases.planning, pirs: c.phases.planning.pirs.filter(p => p.id !== id) },
+              collection: { ...c.phases.collection, sources: c.phases.collection.sources.filter(s => s.pirId !== id) },
+              analysis: { ...c.phases.analysis, reports: c.phases.analysis.reports.filter(r => r.pirId !== id) },
+              dissemination: { ...c.phases.dissemination, logs: c.phases.dissemination.logs.filter(l => l.pirId !== id) }
+            },
+            metrics: c.metrics.filter(m => m.pirId !== id)
+          };
+        }));
+        setConfirmState(null);
+      }
+    });
   };
 
   const handleDeleteSource = (id: string) => {
     if (!activeClientId) return;
-    if (window.confirm("Deseja realmente excluir esta fonte de coleta?")) {
-      setClients(prev => prev.map(c => {
-        if (c.id !== activeClientId) return c;
-        return {
-          ...c,
-          phases: {
-            ...c.phases,
-            collection: {
-              ...c.phases.collection,
-              sources: c.phases.collection.sources.filter(s => s.id !== id)
+    setConfirmState({
+      isOpen: true,
+      title: "Excluir Fonte",
+      message: "Deseja realmente excluir esta fonte de coleta?",
+      onConfirm: () => {
+        setClients(prev => prev.map(c => {
+          if (c.id !== activeClientId) return c;
+          return {
+            ...c,
+            phases: {
+              ...c.phases,
+              collection: {
+                ...c.phases.collection,
+                sources: c.phases.collection.sources.filter(s => s.id !== id)
+              }
             }
-          }
-        };
-      }));
-    }
+          };
+        }));
+        setConfirmState(null);
+      }
+    });
   };
 
   const handleDeleteAnalysis = (id: string) => {
     if (!activeClientId) return;
-    if (window.confirm("Deseja realmente excluir este relatório de análise?")) {
-      setClients(prev => prev.map(c => {
-        if (c.id !== activeClientId) return c;
-        return {
-          ...c,
-          phases: {
-            ...c.phases,
-            analysis: {
-              ...c.phases.analysis,
-              reports: c.phases.analysis.reports.filter(r => r.id !== id)
+    setConfirmState({
+      isOpen: true,
+      title: "Excluir Relatório",
+      message: "Deseja realmente excluir este relatório de análise?",
+      onConfirm: () => {
+        setClients(prev => prev.map(c => {
+          if (c.id !== activeClientId) return c;
+          return {
+            ...c,
+            phases: {
+              ...c.phases,
+              analysis: {
+                ...c.phases.analysis,
+                reports: c.phases.analysis.reports.filter(r => r.id !== id)
+              }
             }
-          }
-        };
-      }));
-    }
+          };
+        }));
+        setConfirmState(null);
+      }
+    });
   };
 
   const handleDeleteDissemination = (id: string) => {
     if (!activeClientId) return;
-    if (window.confirm("Deseja realmente excluir este registro de disseminação?")) {
-      setClients(prev => prev.map(c => {
-        if (c.id !== activeClientId) return c;
-        return {
-          ...c,
-          phases: {
-            ...c.phases,
-            dissemination: {
-              ...c.phases.dissemination,
-              logs: c.phases.dissemination.logs.filter(l => l.id !== id)
+    setConfirmState({
+      isOpen: true,
+      title: "Excluir Disseminação",
+      message: "Deseja realmente excluir este registro de disseminação?",
+      onConfirm: () => {
+        setClients(prev => prev.map(c => {
+          if (c.id !== activeClientId) return c;
+          return {
+            ...c,
+            phases: {
+              ...c.phases,
+              dissemination: {
+                ...c.phases.dissemination,
+                logs: c.phases.dissemination.logs.filter(l => l.id !== id)
+              }
             }
-          }
-        };
-      }));
-    }
+          };
+        }));
+        setConfirmState(null);
+      }
+    });
   };
 
   const handleAddOrEditSource = (source: Omit<IntelligenceSource, 'id'>) => {
@@ -475,9 +522,15 @@ export default function App() {
 
   const handleDeleteMetric = (id: string) => {
     if (!activeClientId) return;
-    if (window.confirm("Excluir registro do caso?")) {
-      setClients(prev => prev.map(c => c.id === activeClientId ? { ...c, metrics: c.metrics.filter(m => m.id !== id) } : c));
-    }
+    setConfirmState({
+      isOpen: true,
+      title: "Excluir Caso",
+      message: "Excluir registro do caso?",
+      onConfirm: () => {
+        setClients(prev => prev.map(c => c.id === activeClientId ? { ...c, metrics: c.metrics.filter(m => m.id !== id) } : c));
+        setConfirmState(null);
+      }
+    });
   };
 
   const handleAddOrEditDissemination = (log: Omit<DisseminationLog, 'id'>) => {
@@ -494,6 +547,38 @@ export default function App() {
   };
 
   // --- Modal Components ---
+
+  const ConfirmationModal = () => {
+    if (!confirmState || !confirmState.isOpen) return null;
+    return (
+      <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setConfirmState(null)} />
+        <div className="relative bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl shadow-2xl animate-in zoom-in-95 overflow-hidden">
+          <div className="px-8 py-6 border-b border-slate-800 flex justify-between items-center bg-slate-800/20">
+            <h3 className="font-bold text-lg flex items-center gap-3 text-white">
+              {confirmState.isAlert ? <AlertTriangle className="w-6 h-6 text-amber-500" /> : <AlertCircle className="w-6 h-6 text-rose-500" />}
+              {confirmState.title}
+            </h3>
+            <button onClick={() => setConfirmState(null)}><X className="w-6 h-6 text-slate-500 hover:text-white transition-colors" /></button>
+          </div>
+          <div className="p-8">
+            <p className="text-slate-300 text-sm leading-relaxed">{confirmState.message}</p>
+          </div>
+          <div className="px-8 py-6 bg-slate-800/20 border-t border-slate-800 flex justify-end gap-4">
+            {!confirmState.isAlert && (
+              <button onClick={() => setConfirmState(null)} className="text-sm text-slate-400 font-bold hover:text-white transition-colors">Cancelar</button>
+            )}
+            <button
+              onClick={confirmState.onConfirm}
+              className={`${confirmState.isAlert ? 'bg-amber-600 hover:bg-amber-500' : 'bg-rose-600 hover:bg-rose-500'} text-white px-6 py-2.5 rounded-xl text-sm font-black shadow-xl transition-all active:scale-95`}
+            >
+              {confirmState.isAlert ? 'Entendi' : 'Confirmar Exclusão'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const OrgModal = () => {
     const [form, setForm] = useState({ 
@@ -1351,6 +1436,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-slate-950 text-slate-100 font-sans">
+      <ConfirmationModal />
       {isMetricModalOpen && <MetricEntryModal />}
       {isDisseminationModalOpen && <DisseminationModal />}
       {isPirModalOpen && <PirModal />}
