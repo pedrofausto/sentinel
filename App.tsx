@@ -116,10 +116,9 @@ const INITIAL_CLIENTS: ClientData[] = [
         integrations: ['Slack', 'Jira'], 
         alertsCount: 1250,
         logs: [
-          { id: 'l1', date: '2024-05-15', type: 'Tactical', reportName: 'IOC_Feed_May_2024.pdf', observations: 'Enviado para o time de SOC e Resposta a Incidentes.' }
+          { id: 'l1', pirId: 'p1', date: '2024-05-15', type: 'Tactical', reportName: 'IOC_Feed_May_2024.pdf', deliveryChannel: 'soc@fintech.global', notifiedTeam: 'SOC N2', observations: 'Enviado para o time de SOC e Resposta a Incidentes.' }
         ]
-      },
-      feedback: { kpis: [], improvements: [] }
+      }
     },
     metrics: [
       { id: 'm1', pirId: 'p1', hasIncident: true, incidentDate: '2024-05-10T08:00', discoveryDate: '2024-05-11T10:00', disseminationDate: '2024-05-12T14:00', wasPreviouslyReported: true, incidentPrevented: true, impactScale: 'High' },
@@ -179,8 +178,6 @@ export default function App() {
   const [isAiTyping, setIsAiTyping] = useState(false);
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
-  const [expandedPirId, setExpandedPirId] = useState<string | null>(null);
-
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
   const [isMetricModalOpen, setIsMetricModalOpen] = useState(false);
@@ -199,6 +196,7 @@ export default function App() {
   
   const [sourceModalPirId, setSourceModalPirId] = useState<string | null>(null);
   const [analysisModalPirId, setAnalysisModalPirId] = useState<string | null>(null);
+  const [disseminationModalPirId, setDisseminationModalPirId] = useState<string | null>(null);
 
   const activeClient = useMemo(() => 
     clients.find(c => c.id === activeClientId) || null
@@ -265,7 +263,10 @@ export default function App() {
       disseminacao: activeClient.phases.dissemination.logs.map(l => ({
         arquivo: l.reportName,
         tipo: l.type,
-        obs: l.observations
+        canal: l.deliveryChannel,
+        time: l.notifiedTeam,
+        obs: l.observations,
+        vinc_pir: activeClient.phases.planning.pirs.find(p => p.id === l.pirId)?.title
       }))
     }, null, 2);
   };
@@ -326,8 +327,7 @@ export default function App() {
           planning: { pirs: [], stakeholders: [] },
           collection: { sources: [] },
           analysis: { reports: [], ttps: [] },
-          dissemination: { integrations: [], alertsCount: 0, logs: [] },
-          feedback: { kpis: [], improvements: [] }
+          dissemination: { integrations: [], alertsCount: 0, logs: [] }
         },
         metrics: []
       };
@@ -365,8 +365,78 @@ export default function App() {
 
   const handleDeletePir = (id: string) => {
     if (!activeClientId) return;
-    if (window.confirm("Excluir este PIR e dados associados?")) {
-      setClients(prev => prev.map(c => c.id === activeClientId ? { ...c, phases: { ...c.phases, planning: { ...c.phases.planning, pirs: c.phases.planning.pirs.filter(p => p.id !== id) } } } : c));
+    if (window.confirm("Excluir este PIR e TODOS os dados dependentes (fontes, análises, métricas e disseminações)?")) {
+      setClients(prev => prev.map(c => {
+        if (c.id !== activeClientId) return c;
+        return {
+          ...c,
+          phases: {
+            ...c.phases,
+            planning: { ...c.phases.planning, pirs: c.phases.planning.pirs.filter(p => p.id !== id) },
+            collection: { ...c.phases.collection, sources: c.phases.collection.sources.filter(s => s.pirId !== id) },
+            analysis: { ...c.phases.analysis, reports: c.phases.analysis.reports.filter(r => r.pirId !== id) },
+            dissemination: { ...c.phases.dissemination, logs: c.phases.dissemination.logs.filter(l => l.pirId !== id) }
+          },
+          metrics: c.metrics.filter(m => m.pirId !== id)
+        };
+      }));
+    }
+  };
+
+  const handleDeleteSource = (id: string) => {
+    if (!activeClientId) return;
+    if (window.confirm("Deseja realmente excluir esta fonte de coleta?")) {
+      setClients(prev => prev.map(c => {
+        if (c.id !== activeClientId) return c;
+        return {
+          ...c,
+          phases: {
+            ...c.phases,
+            collection: {
+              ...c.phases.collection,
+              sources: c.phases.collection.sources.filter(s => s.id !== id)
+            }
+          }
+        };
+      }));
+    }
+  };
+
+  const handleDeleteAnalysis = (id: string) => {
+    if (!activeClientId) return;
+    if (window.confirm("Deseja realmente excluir este relatório de análise?")) {
+      setClients(prev => prev.map(c => {
+        if (c.id !== activeClientId) return c;
+        return {
+          ...c,
+          phases: {
+            ...c.phases,
+            analysis: {
+              ...c.phases.analysis,
+              reports: c.phases.analysis.reports.filter(r => r.id !== id)
+            }
+          }
+        };
+      }));
+    }
+  };
+
+  const handleDeleteDissemination = (id: string) => {
+    if (!activeClientId) return;
+    if (window.confirm("Deseja realmente excluir este registro de disseminação?")) {
+      setClients(prev => prev.map(c => {
+        if (c.id !== activeClientId) return c;
+        return {
+          ...c,
+          phases: {
+            ...c.phases,
+            dissemination: {
+              ...c.phases.dissemination,
+              logs: c.phases.dissemination.logs.filter(l => l.id !== id)
+            }
+          }
+        };
+      }));
     }
   };
 
@@ -383,13 +453,6 @@ export default function App() {
     setEditingSource(null);
   };
 
-  const handleDeleteSource = (id: string) => {
-    if (!activeClientId) return;
-    if (window.confirm("Excluir esta fonte de coleta?")) {
-      setClients(prev => prev.map(c => c.id === activeClientId ? { ...c, phases: { ...c.phases, collection: { ...c.phases.collection, sources: c.phases.collection.sources.filter(s => s.id !== id) } } } : c));
-    }
-  };
-
   const handleAddOrEditAnalysis = (report: Omit<Report, 'id'>) => {
     if (!activeClientId) return;
     setClients(prev => prev.map(c => {
@@ -401,13 +464,6 @@ export default function App() {
     }));
     setIsAnalysisModalOpen(false);
     setEditingAnalysis(null);
-  };
-
-  const handleDeleteAnalysis = (id: string) => {
-    if (!activeClientId) return;
-    if (window.confirm("Excluir este relatório de análise?")) {
-      setClients(prev => prev.map(c => c.id === activeClientId ? { ...c, phases: { ...c.phases, analysis: { ...c.phases.analysis, reports: c.phases.analysis.reports.filter(r => r.id !== id) } } } : c));
-    }
   };
 
   const handleAddOrEditMetric = (metric: Omit<MetricRecord, 'id'>) => {
@@ -435,13 +491,6 @@ export default function App() {
     }));
     setIsDisseminationModalOpen(false);
     setEditingDissemination(null);
-  };
-
-  const handleDeleteDissemination = (id: string) => {
-    if (!activeClientId) return;
-    if (window.confirm("Excluir este log de disseminação?")) {
-      setClients(prev => prev.map(c => c.id === activeClientId ? { ...c, phases: { ...c.phases, dissemination: { ...c.phases.dissemination, logs: c.phases.dissemination.logs.filter(l => l.id !== id) } } } : c));
-    }
   };
 
   // --- Modal Components ---
@@ -748,7 +797,26 @@ export default function App() {
   };
 
   const DisseminationModal = () => {
-    const [form, setForm] = useState<Omit<DisseminationLog, 'id'>>(editingDissemination ? { ...editingDissemination } : { date: new Date().toISOString().split('T')[0], type: 'Tactical', reportName: '', observations: '' });
+    const [form, setForm] = useState<Omit<DisseminationLog, 'id'>>(editingDissemination ? { ...editingDissemination } : { pirId: disseminationModalPirId || activeClient?.phases.planning.pirs[0]?.id || '', date: new Date().toISOString().split('T')[0], type: 'Tactical', reportName: '', deliveryChannel: '', notifiedTeam: '', observations: '' });
+    const [error, setError] = useState('');
+
+    const validateEmail = (email: string) => {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    };
+
+    const handleSave = () => {
+        if (!form.pirId) {
+            setError('Por favor, selecione um PIR para vincular este log.');
+            return;
+        }
+        if (form.deliveryChannel && !validateEmail(form.deliveryChannel)) {
+            setError('Por favor, insira um e-mail válido no Canal de Envio.');
+            return;
+        }
+        setError('');
+        handleAddOrEditDissemination(form);
+    };
+
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => { setIsDisseminationModalOpen(false); setEditingDissemination(null); }} />
@@ -757,7 +825,14 @@ export default function App() {
             <h3 className="font-bold text-xl flex items-center gap-3"><Share2 className="w-6 h-6 text-purple-500" /> {editingDissemination ? 'Editar Log' : 'Nova Disseminação/Alerta'}</h3>
             <button onClick={() => { setIsDisseminationModalOpen(false); setEditingDissemination(null); }}><X className="w-6 h-6 text-slate-500" /></button>
           </div>
-          <div className="p-8 space-y-6">
+          <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Vincular a PIR</label>
+              <select value={form.pirId} onChange={e => setForm({...form, pirId: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500">
+                <option value="">Selecione um PIR...</option>
+                {activeClient?.phases.planning.pirs.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+              </select>
+            </div>
             <div className="grid grid-cols-2 gap-5">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Data</label>
@@ -774,14 +849,25 @@ export default function App() {
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nome do Report/Arquivo</label>
               <input type="text" value={form.reportName} onChange={e => setForm({...form, reportName: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500" placeholder="Ex: IOC_Feed_May.csv" />
             </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Observações</label>
-              <textarea rows={3} value={form.observations} onChange={e => setForm({...form, observations: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500 resize-none" placeholder="Canais de envio, times notificados..." />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Canal de Envio (Email)</label>
+                <input type="email" value={form.deliveryChannel} onChange={e => { setForm({...form, deliveryChannel: e.target.value}); setError(''); }} className={`w-full bg-slate-950 border ${error.includes('e-mail') ? 'border-rose-500' : 'border-slate-800'} rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500`} placeholder="ex: soc@empresa.com" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Time Notificado</label>
+                <input type="text" value={form.notifiedTeam} onChange={e => setForm({...form, notifiedTeam: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500" placeholder="ex: SOC N2, Incident Response" />
+              </div>
             </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Demais Observações</label>
+              <textarea rows={3} value={form.observations} onChange={e => setForm({...form, observations: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500 resize-none" placeholder="Contexto adicional da disseminação..." />
+            </div>
+            {error && <p className="text-xs text-rose-500 font-bold flex items-center gap-2"><AlertCircle className="w-4 h-4" /> {error}</p>}
           </div>
           <div className="px-8 py-6 bg-slate-800/20 border-t border-slate-800 flex justify-end gap-4">
             <button onClick={() => { setIsDisseminationModalOpen(false); setEditingDissemination(null); }} className="text-sm text-slate-400 font-bold">Cancelar</button>
-            <button onClick={() => handleAddOrEditDissemination(form)} className="bg-purple-600 hover:bg-purple-500 text-white px-8 py-3 rounded-2xl text-sm font-black shadow-xl transition-all">Salvar Log</button>
+            <button onClick={handleSave} className="bg-purple-600 hover:bg-purple-500 text-white px-8 py-3 rounded-2xl text-sm font-black shadow-xl transition-all">Salvar Log</button>
           </div>
         </div>
       </div>
@@ -885,8 +971,8 @@ export default function App() {
                          <p className="text-xs text-slate-500 leading-relaxed">{p.description}</p>
                       </div>
                       <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => { setEditingPir(p); setIsPirModalOpen(true); }} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400"><Edit2 className="w-4 h-4" /></button>
-                        <button onClick={() => handleDeletePir(p.id)} className="p-2 hover:bg-rose-500/10 rounded-lg text-slate-500 hover:text-rose-400"><Trash2 className="w-4 h-4" /></button>
+                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditingPir(p); setIsPirModalOpen(true); }} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400"><Edit2 className="w-4 h-4" /></button>
+                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeletePir(p.id); }} className="p-2 hover:bg-rose-500/10 rounded-lg text-slate-500 hover:text-rose-400"><Trash2 className="w-4 h-4" /></button>
                       </div>
                    </div>
                 </div>
@@ -912,8 +998,8 @@ export default function App() {
                          </div>
                       </div>
                       <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => { setEditingSource(s); setIsSourceModalOpen(true); }} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400"><Edit2 className="w-4 h-4" /></button>
-                        <button onClick={() => handleDeleteSource(s.id)} className="p-2 hover:bg-rose-500/10 rounded-lg text-slate-500 hover:text-rose-400"><Trash2 className="w-4 h-4" /></button>
+                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditingSource(s); setIsSourceModalOpen(true); }} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400"><Edit2 className="w-4 h-4" /></button>
+                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteSource(s.id); }} className="p-2 hover:bg-rose-500/10 rounded-lg text-slate-500 hover:text-rose-400"><Trash2 className="w-4 h-4" /></button>
                       </div>
                    </div>
                 </div>
@@ -935,8 +1021,8 @@ export default function App() {
                         </div>
                       </div>
                       <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => { setEditingAnalysis(r); setIsAnalysisModalOpen(true); }} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400"><Edit2 className="w-4 h-4" /></button>
-                        <button onClick={() => handleDeleteAnalysis(r.id)} className="p-2 hover:bg-rose-500/10 rounded-lg text-slate-500 hover:text-rose-400"><Trash2 className="w-4 h-4" /></button>
+                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditingAnalysis(r); setIsAnalysisModalOpen(true); }} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400"><Edit2 className="w-4 h-4" /></button>
+                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteAnalysis(r.id); }} className="p-2 hover:bg-rose-500/10 rounded-lg text-slate-500 hover:text-rose-400"><Trash2 className="w-4 h-4" /></button>
                       </div>
                    </div>
                    <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">{r.content}</p>
@@ -947,26 +1033,65 @@ export default function App() {
           );
         case 'dissemination':
           return (
-            <div className="space-y-4">
-               {activeClient.phases.dissemination.logs.map(l => (
-                 <div key={l.id} className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl hover:border-purple-500/30 transition-all group">
-                    <div className="flex justify-between items-center mb-4">
-                       <div className="flex items-center gap-4">
-                          <div className="p-2 bg-purple-500/10 text-purple-400 rounded-lg"><Share2 className="w-4 h-4" /></div>
-                          <div>
-                             <h4 className="font-bold text-slate-100">{l.reportName}</h4>
-                             <span className="text-[10px] font-bold text-slate-500 uppercase">{l.type} • {l.date}</span>
-                          </div>
-                       </div>
-                       <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                         <button onClick={() => { setEditingDissemination(l); setIsDisseminationModalOpen(true); }} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400"><Edit2 className="w-4 h-4" /></button>
-                         <button onClick={() => handleDeleteDissemination(l.id)} className="p-2 hover:bg-rose-500/10 rounded-lg text-slate-500 hover:text-rose-400"><Trash2 className="w-4 h-4" /></button>
-                       </div>
+            <div className="space-y-8">
+              {activeClient.phases.planning.pirs.map(pir => {
+                const pirLogs = activeClient.phases.dissemination.logs.filter(l => l.pirId === pir.id);
+                return (
+                  <div key={pir.id} className="bg-slate-900/40 border border-slate-800/50 rounded-3xl p-6 shadow-xl">
+                    <div className="flex justify-between items-center mb-6 border-b border-slate-800/50 pb-4">
+                      <div className="flex items-center gap-4">
+                        <div className="p-2.5 bg-purple-500/20 text-purple-400 rounded-2xl"><TargetIcon className="w-5 h-5" /></div>
+                        <div>
+                          <h4 className="font-bold text-slate-100 uppercase tracking-tight">{pir.title}</h4>
+                          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{pirLogs.length} DISSEMINAÇÕES REGISTRADAS</span>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => { setDisseminationModalPirId(pir.id); setEditingDissemination(null); setIsDisseminationModalOpen(true); }}
+                        className="p-2 bg-slate-800 hover:bg-slate-700 text-purple-400 rounded-xl transition-all"
+                        title="Adicionar Disseminação para este PIR"
+                      >
+                        <Plus className="w-5 h-5" />
+                      </button>
                     </div>
-                    {l.observations && <p className="text-xs text-slate-500 italic">"{l.observations}"</p>}
-                 </div>
-               ))}
-               <button onClick={() => { setEditingDissemination(null); setIsDisseminationModalOpen(true); }} className="w-full py-6 border-2 border-dashed border-slate-800 rounded-2xl text-slate-500 hover:text-purple-400 hover:border-purple-500/50 transition-all text-xs font-black uppercase tracking-widest">+ Registrar Disseminação</button>
+                    
+                    <div className="space-y-4">
+                      {pirLogs.map(l => (
+                        <div key={l.id} className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl hover:border-purple-500/30 transition-all group">
+                           <div className="flex justify-between items-start mb-4">
+                              <div className="flex items-center gap-4">
+                                 <div className="p-2 bg-purple-500/10 text-purple-400 rounded-lg"><Share2 className="w-4 h-4" /></div>
+                                 <div>
+                                    <h4 className="font-bold text-slate-100">{l.reportName}</h4>
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase">{l.type} • {l.date}</span>
+                                    <div className="flex flex-wrap gap-x-3 mt-1">
+                                       {l.deliveryChannel && <span className="text-[10px] text-indigo-400 font-bold bg-indigo-500/10 px-1.5 rounded uppercase">{l.deliveryChannel}</span>}
+                                       {l.notifiedTeam && <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-1.5 rounded uppercase">{l.notifiedTeam}</span>}
+                                    </div>
+                                 </div>
+                              </div>
+                              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditingDissemination(l); setIsDisseminationModalOpen(true); }} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400"><Edit2 className="w-4 h-4" /></button>
+                                <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteDissemination(l.id); }} className="p-2 hover:bg-rose-500/10 rounded-lg text-slate-500 hover:text-rose-400"><Trash2 className="w-4 h-4" /></button>
+                              </div>
+                           </div>
+                           {l.observations && <p className="text-xs text-slate-500 italic mt-2">"{l.observations}"</p>}
+                        </div>
+                      ))}
+                      {pirLogs.length === 0 && (
+                        <p className="text-center py-6 text-slate-600 italic text-xs">Nenhuma disseminação vinculada a este PIR ainda.</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              
+              <button 
+                onClick={() => { setDisseminationModalPirId(null); setEditingDissemination(null); setIsDisseminationModalOpen(true); }} 
+                className="w-full py-6 border-2 border-dashed border-slate-800 rounded-3xl text-slate-500 hover:text-purple-400 hover:border-purple-500/50 transition-all text-xs font-black uppercase tracking-widest"
+              >
+                + Registrar Disseminação Geral
+              </button>
             </div>
           );
         default:
@@ -1044,6 +1169,29 @@ export default function App() {
       { name: 'Consumado', value: performanceStats?.consummated || 0, color: '#f43f5e' }
     ];
 
+    const chartTotal = (data: any[]) => data.reduce((acc, curr) => acc + curr.value, 0);
+
+    const commonTooltipProps = (data: any[]) => ({
+      contentStyle: { 
+        backgroundColor: '#ffffff', 
+        border: 'none', 
+        borderRadius: '12px', 
+        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+        padding: '12px'
+      },
+      itemStyle: {
+        color: '#0f172a',
+        fontSize: '12px',
+        fontWeight: 'bold',
+        textTransform: 'uppercase' as const
+      },
+      formatter: (value: number, name: string) => {
+        const total = chartTotal(data);
+        const percent = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+        return [`${percent}% (${value})`, name];
+      }
+    });
+
     return (
       <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
         <header className="flex justify-between items-center mb-8">
@@ -1065,7 +1213,7 @@ export default function App() {
                   <Pie data={typeData} dataKey="value" innerRadius={45} outerRadius={60} stroke="none" paddingAngle={5}>
                     {typeData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
                   </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '8px', fontSize: '10px' }} />
+                  <Tooltip {...commonTooltipProps(typeData)} />
                   <Legend verticalAlign="bottom" align="center" iconType="circle" />
                 </PieChart>
               </ResponsiveContainer>
@@ -1079,7 +1227,7 @@ export default function App() {
                   <Pie data={accuracyData} dataKey="value" innerRadius={45} outerRadius={60} stroke="none" paddingAngle={5}>
                     {accuracyData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
                   </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '8px', fontSize: '10px' }} />
+                  <Tooltip {...commonTooltipProps(accuracyData)} />
                   <Legend verticalAlign="bottom" align="center" iconType="circle" />
                 </PieChart>
               </ResponsiveContainer>
@@ -1093,7 +1241,7 @@ export default function App() {
                   <Pie data={resultData} dataKey="value" innerRadius={45} outerRadius={60} stroke="none" paddingAngle={5}>
                     {resultData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
                   </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '8px', fontSize: '10px' }} />
+                  <Tooltip {...commonTooltipProps(resultData)} />
                   <Legend verticalAlign="bottom" align="center" iconType="circle" />
                 </PieChart>
               </ResponsiveContainer>
@@ -1250,7 +1398,7 @@ export default function App() {
             <div>
               <label className="text-[9px] font-black text-slate-500 uppercase px-4 mb-6 block tracking-[0.2em]">Ciclo de Inteligência</label>
               <div className="space-y-2">
-                {(Object.keys(PHASE_CONFIG) as CTIPhase[]).filter(p => p !== 'metrics').map(p => (
+                {(Object.keys(PHASE_CONFIG) as CTIPhase[]).map(p => (
                   <NavItem key={p} active={activePhase === p} onClick={() => setActivePhase(p)} icon={PHASE_CONFIG[p].icon} label={p === 'collection' ? PHASE_CONFIG[p].title : PHASE_CONFIG[p].title.split(' ')[0]} color={PHASE_CONFIG[p].color} />
                 ))}
               </div>

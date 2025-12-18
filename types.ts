@@ -1,5 +1,5 @@
 
-export type CTIPhase = 'planning' | 'collection' | 'analysis' | 'dissemination' | 'feedback' | 'metrics';
+export type CTIPhase = 'planning' | 'collection' | 'analysis' | 'dissemination';
 
 export interface StatusHistory {
   status: string;
@@ -40,9 +40,12 @@ export interface MetricRecord {
 
 export interface DisseminationLog {
   id: string;
+  pirId: string; // Vínculo com PIR (Um PIR pode ter múltiplos logs)
   date: string;
   type: 'Strategic' | 'Operational' | 'Tactical';
   reportName: string;
+  deliveryChannel?: string; // Canal de Envio (Email)
+  notifiedTeam?: string;    // Time Notificado
   observations?: string;
   attachmentName?: string;
   attachmentType?: string;
@@ -80,7 +83,6 @@ export interface ClientData {
       alertsCount: number;
       logs: DisseminationLog[];
     };
-    feedback: { kpis: KPI[]; improvements: string[] };
   };
   metrics: MetricRecord[];
 }

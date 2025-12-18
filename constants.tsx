@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Target, Search, BarChart3, Share2, RefreshCw } from 'lucide-react';
+import { Target, Search, BarChart3, Share2 } from 'lucide-react';
 import { CTIPhase } from './types';
 
 export const PHASE_CONFIG: Record<CTIPhase, { 
@@ -47,23 +47,5 @@ export const PHASE_CONFIG: Record<CTIPhase, {
     prerequisites: ['Canais de comunicação', 'Automação SOAR'],
     interactions: ['Triagem SOC', 'Cenários Red/Purple Team'],
     outputs: ['Regras de detecção', 'Hipóteses de Hunting', 'ROI']
-  },
-  feedback: {
-    title: 'Feedback e Melhoria',
-    icon: <RefreshCw className="w-5 h-5" />,
-    color: 'rose',
-    inputs: ['Qualidade de alertas', 'Resultados Purple Team'],
-    prerequisites: ['Métricas e KPIs', 'Cultura de melhoria'],
-    interactions: ['Revisão de eficácia', 'Ajuste de processos'],
-    outputs: ['PIRs Atualizados', 'Métricas de Eficácia']
-  },
-  metrics: {
-    title: 'Registro de Métricas',
-    icon: <BarChart3 className="w-5 h-5" />,
-    color: 'indigo',
-    inputs: ['Casos Reais', 'Incidentes'],
-    prerequisites: ['Acesso ao SIEM/SOC'],
-    interactions: ['Validação manual de detecção'],
-    outputs: ['MTTD', 'MTTDis', 'Precisão']
   }
 };
