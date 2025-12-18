@@ -198,6 +198,17 @@ export default function App() {
   const [analysisModalPirId, setAnalysisModalPirId] = useState<string | null>(null);
   const [disseminationModalPirId, setDisseminationModalPirId] = useState<string | null>(null);
 
+  // New confirmation state
+  const [confirmState, setConfirmState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isAlert?: boolean;
+    confirmText?: string;
+    variant?: 'danger' | 'info';
+  } | null>(null);
+
   const activeClient = useMemo(() => 
     clients.find(c => c.id === activeClientId) || null
   , [clients, activeClientId]);
@@ -339,11 +350,32 @@ export default function App() {
   };
 
   const handleDeleteOrg = (id: string) => {
-    if (clients.length <= 1) return alert("Deve haver pelo menos uma organização.");
-    if (window.confirm("Excluir organização e todos os dados CTI associados?")) {
-      setClients(prev => prev.filter(c => c.id !== id));
-      if (activeClientId === id) setActiveClientId(clients.filter(c => c.id !== id)[0]?.id || null);
+    if (clients.length <= 1) {
+      setConfirmState({
+        isOpen: true,
+        title: "Ação Não Permitida",
+        message: "Deve haver pelo menos uma organização no sistema.",
+        isAlert: true,
+        onConfirm: () => setConfirmState(null)
+      });
+      return;
     }
+
+    setConfirmState({
+      isOpen: true,
+      title: "Excluir Organização",
+      message: "Tem certeza que deseja excluir esta organização e todos os dados CTI associados? Esta ação é irreversível.",
+      confirmText: "Excluir Definitivamente",
+      variant: "danger",
+      onConfirm: () => {
+        setClients(prev => prev.filter(c => c.id !== id));
+        if (activeClientId === id) {
+          const remaining = clients.filter(c => c.id !== id);
+          setActiveClientId(remaining[0]?.id || null);
+        }
+        setConfirmState(null);
+      }
+    });
   };
 
   const handleAddOrEditPir = (pir: Omit<PIR, 'id'>) => {
@@ -365,79 +397,111 @@ export default function App() {
 
   const handleDeletePir = (id: string) => {
     if (!activeClientId) return;
-    if (window.confirm("Excluir este PIR e TODOS os dados dependentes (fontes, análises, métricas e disseminações)?")) {
-      setClients(prev => prev.map(c => {
-        if (c.id !== activeClientId) return c;
-        return {
-          ...c,
-          phases: {
-            ...c.phases,
-            planning: { ...c.phases.planning, pirs: c.phases.planning.pirs.filter(p => p.id !== id) },
-            collection: { ...c.phases.collection, sources: c.phases.collection.sources.filter(s => s.pirId !== id) },
-            analysis: { ...c.phases.analysis, reports: c.phases.analysis.reports.filter(r => r.pirId !== id) },
-            dissemination: { ...c.phases.dissemination, logs: c.phases.dissemination.logs.filter(l => l.pirId !== id) }
-          },
-          metrics: c.metrics.filter(m => m.pirId !== id)
-        };
-      }));
-    }
+    setConfirmState({
+      isOpen: true,
+      title: "Excluir PIR",
+      message: "Excluir este PIR removerá também TODOS os dados dependentes (fontes, análises, métricas e disseminações vinculadas). Deseja prosseguir?",
+      confirmText: "Sim, Excluir Tudo",
+      variant: "danger",
+      onConfirm: () => {
+        setClients(prev => prev.map(c => {
+          if (c.id !== activeClientId) return c;
+          return {
+            ...c,
+            phases: {
+              ...c.phases,
+              planning: { ...c.phases.planning, pirs: c.phases.planning.pirs.filter(p => p.id !== id) },
+              collection: { ...c.phases.collection, sources: c.phases.collection.sources.filter(s => s.pirId !== id) },
+              analysis: { ...c.phases.analysis, reports: c.phases.analysis.reports.filter(r => r.pirId !== id) },
+              dissemination: { ...c.phases.dissemination, logs: c.phases.dissemination.logs.filter(l => l.pirId !== id) }
+            },
+            metrics: c.metrics.filter(m => m.pirId !== id)
+          };
+        }));
+        setConfirmState(null);
+      }
+    });
   };
 
   const handleDeleteSource = (id: string) => {
     if (!activeClientId) return;
-    if (window.confirm("Deseja realmente excluir esta fonte de coleta?")) {
-      setClients(prev => prev.map(c => {
-        if (c.id !== activeClientId) return c;
-        return {
-          ...c,
-          phases: {
-            ...c.phases,
-            collection: {
-              ...c.phases.collection,
-              sources: c.phases.collection.sources.filter(s => s.id !== id)
+    setConfirmState({
+      isOpen: true,
+      title: "Excluir Fonte",
+      message: "Deseja realmente remover esta fonte de coleta de inteligência?",
+      confirmText: "Excluir Fonte",
+      variant: "danger",
+      onConfirm: () => {
+        setClients(prev => prev.map(c => {
+          if (c.id !== activeClientId) return c;
+          return {
+            ...c,
+            phases: {
+              ...c.phases,
+              collection: {
+                ...c.phases.collection,
+                sources: c.phases.collection.sources.filter(s => s.id !== id)
+              }
             }
-          }
-        };
-      }));
-    }
+          };
+        }));
+        setConfirmState(null);
+      }
+    });
   };
 
   const handleDeleteAnalysis = (id: string) => {
     if (!activeClientId) return;
-    if (window.confirm("Deseja realmente excluir este relatório de análise?")) {
-      setClients(prev => prev.map(c => {
-        if (c.id !== activeClientId) return c;
-        return {
-          ...c,
-          phases: {
-            ...c.phases,
-            analysis: {
-              ...c.phases.analysis,
-              reports: c.phases.analysis.reports.filter(r => r.id !== id)
+    setConfirmState({
+      isOpen: true,
+      title: "Excluir Relatório",
+      message: "Este relatório de análise será apagado permanentemente. Confirmar?",
+      confirmText: "Excluir Relatório",
+      variant: "danger",
+      onConfirm: () => {
+        setClients(prev => prev.map(c => {
+          if (c.id !== activeClientId) return c;
+          return {
+            ...c,
+            phases: {
+              ...c.phases,
+              analysis: {
+                ...c.phases.analysis,
+                reports: c.phases.analysis.reports.filter(r => r.id !== id)
+              }
             }
-          }
-        };
-      }));
-    }
+          };
+        }));
+        setConfirmState(null);
+      }
+    });
   };
 
   const handleDeleteDissemination = (id: string) => {
     if (!activeClientId) return;
-    if (window.confirm("Deseja realmente excluir este registro de disseminação?")) {
-      setClients(prev => prev.map(c => {
-        if (c.id !== activeClientId) return c;
-        return {
-          ...c,
-          phases: {
-            ...c.phases,
-            dissemination: {
-              ...c.phases.dissemination,
-              logs: c.phases.dissemination.logs.filter(l => l.id !== id)
+    setConfirmState({
+      isOpen: true,
+      title: "Excluir Log",
+      message: "Deseja excluir este registro de disseminação de inteligência?",
+      confirmText: "Remover Log",
+      variant: "danger",
+      onConfirm: () => {
+        setClients(prev => prev.map(c => {
+          if (c.id !== activeClientId) return c;
+          return {
+            ...c,
+            phases: {
+              ...c.phases,
+              dissemination: {
+                ...c.phases.dissemination,
+                logs: c.phases.dissemination.logs.filter(l => l.id !== id)
+              }
             }
-          }
-        };
-      }));
-    }
+          };
+        }));
+        setConfirmState(null);
+      }
+    });
   };
 
   const handleAddOrEditSource = (source: Omit<IntelligenceSource, 'id'>) => {
@@ -475,9 +539,17 @@ export default function App() {
 
   const handleDeleteMetric = (id: string) => {
     if (!activeClientId) return;
-    if (window.confirm("Excluir registro do caso?")) {
-      setClients(prev => prev.map(c => c.id === activeClientId ? { ...c, metrics: c.metrics.filter(m => m.id !== id) } : c));
-    }
+    setConfirmState({
+      isOpen: true,
+      title: "Excluir Registro de Caso",
+      message: "Deseja realmente excluir este registro de caso e suas métricas?",
+      confirmText: "Excluir Caso",
+      variant: "danger",
+      onConfirm: () => {
+        setClients(prev => prev.map(c => c.id === activeClientId ? { ...c, metrics: c.metrics.filter(m => m.id !== id) } : c));
+        setConfirmState(null);
+      }
+    });
   };
 
   const handleAddOrEditDissemination = (log: Omit<DisseminationLog, 'id'>) => {
@@ -493,7 +565,41 @@ export default function App() {
     setEditingDissemination(null);
   };
 
-  // --- Modal Components ---
+  // --- UI Components ---
+
+  const ConfirmationModal = () => {
+    if (!confirmState || !confirmState.isOpen) return null;
+    return (
+      <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-xl animate-in fade-in duration-300" />
+        <div className="relative bg-slate-900 border border-slate-800 w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+          <div className="p-8 text-center">
+            <div className={`w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center ${confirmState.variant === 'danger' ? 'bg-rose-500/10 text-rose-500' : 'bg-indigo-500/10 text-indigo-500'}`}>
+              <AlertTriangle className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-black text-white mb-2 uppercase tracking-tight">{confirmState.title}</h3>
+            <p className="text-slate-400 text-sm leading-relaxed">{confirmState.message}</p>
+          </div>
+          <div className="flex border-t border-slate-800">
+            {!confirmState.isAlert && (
+              <button 
+                onClick={() => setConfirmState(null)} 
+                className="flex-1 py-5 text-sm font-bold text-slate-500 hover:text-slate-100 hover:bg-slate-800/50 transition-colors"
+              >
+                Cancelar
+              </button>
+            )}
+            <button 
+              onClick={confirmState.onConfirm} 
+              className={`flex-1 py-5 text-sm font-black transition-colors ${confirmState.variant === 'danger' ? 'bg-rose-600/10 text-rose-500 hover:bg-rose-600 hover:text-white' : 'bg-indigo-600/10 text-indigo-400 hover:bg-indigo-600 hover:text-white'} ${confirmState.isAlert ? 'w-full' : ''}`}
+            >
+              {confirmState.confirmText || 'Confirmar'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const OrgModal = () => {
     const [form, setForm] = useState({ 
@@ -1357,6 +1463,7 @@ export default function App() {
       {isSourceModalOpen && <SourceModal />}
       {isAnalysisModalOpen && <AnalysisModal />}
       {isOrgModalOpen && <OrgModal />}
+      <ConfirmationModal />
 
       <aside className={`bg-slate-900/60 border-r border-slate-800/50 transition-all duration-500 flex flex-col z-20 backdrop-blur-2xl ${isSidebarOpen ? 'w-80' : 'w-0 -translate-x-full overflow-hidden'}`}>
         <div className="p-10 flex items-center gap-4 border-b border-slate-800/30">
