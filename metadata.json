@@ -1,0 +1,8 @@
+{
+  "name": "Sentinel - CTI Lifecycle Manager",
+  "description": "A comprehensive Cyber Threat Intelligence program manager that tracks Planning, Collection, Analysis, Dissemination, and Feedback for multiple clients.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
