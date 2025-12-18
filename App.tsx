@@ -102,8 +102,8 @@ const INITIAL_CLIENTS: ClientData[] = [
       },
       collection: { 
         sources: [
-          { id: 's1', pirId: 'p1', name: 'AbuseIPDB', type: 'OSINT', confidence: 85, reliability: 'B', integrationDate: '2024-01-15' },
-          { id: 's2', pirId: 'p2', name: 'Flashpoint', type: 'FeedComercial', confidence: 95, reliability: 'A', integrationDate: '2024-02-10' }
+          { id: 's1', pirId: 'p1', name: 'AbuseIPDB', type: 'OSINT', credibility: 'B', reliability: 'B', integrationDate: '2024-01-15' },
+          { id: 's2', pirId: 'p2', name: 'Flashpoint', type: 'FeedComercial', credibility: 'A', reliability: 'A', integrationDate: '2024-02-10' }
         ]
       },
       analysis: { 
@@ -142,6 +142,28 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
 }
+
+const SCALE_LABELS = {
+  reliability: {
+    A: 'Completamente Confiável',
+    B: 'Geralmente Confiável',
+    C: 'Razoavelmente Confiável',
+    D: 'Não Usualmente Confiável',
+    E: 'Não Confiável',
+    F: 'Confiabilidade Não Julgável'
+  },
+  credibility: {
+    A: 'Confirmado por outras fontes',
+    B: 'Provavelmente Verdadeiro',
+    C: 'Possivelmente Verdadeiro',
+    D: 'Duvidoso',
+    E: 'Improvável',
+    F: 'Veracidade Não Julgável'
+  }
+};
+
+const SCALE_VALUES = { A: 6, B: 5, C: 4, D: 3, E: 2, F: 1 };
+const SCALE_ORDER: (keyof typeof SCALE_VALUES)[] = ['A', 'B', 'C', 'D', 'E', 'F'];
 
 export default function App() {
   const [clients, setClients] = useState<ClientData[]>(INITIAL_CLIENTS);
@@ -224,7 +246,7 @@ export default function App() {
       fontes_coleta: activeClient.phases.collection.sources.map(s => ({
         nome: s.name,
         tipo: s.type,
-        confianca: s.confidence,
+        credibilidade: s.credibility,
         confiabilidade: s.reliability
       })),
       historico_casos_incidentes: activeClient.metrics.map(m => ({
@@ -587,45 +609,90 @@ export default function App() {
   };
 
   const SourceModal = () => {
-    const [form, setForm] = useState<Omit<IntelligenceSource, 'id'>>(editingSource ? { ...editingSource } : { pirId: sourceModalPirId || activeClient?.phases.planning.pirs[0]?.id || '', name: '', type: 'OSINT', confidence: 50, reliability: 'C', integrationDate: new Date().toISOString().split('T')[0] });
+    const [form, setForm] = useState<Omit<IntelligenceSource, 'id'>>(editingSource ? { ...editingSource } : { 
+      pirId: sourceModalPirId || activeClient?.phases.planning.pirs[0]?.id || '', 
+      name: '', 
+      type: 'OSINT', 
+      credibility: 'C', 
+      reliability: 'C', 
+      integrationDate: new Date().toISOString().split('T')[0] 
+    });
+
+    const getScoreColor = (rel: keyof typeof SCALE_VALUES, cred: keyof typeof SCALE_VALUES) => {
+      const sum = SCALE_VALUES[rel] + SCALE_VALUES[cred];
+      if (sum >= 10) return 'bg-emerald-500';
+      if (sum >= 7) return 'bg-amber-500';
+      return 'bg-rose-500';
+    };
+
+    const handleMatrixClick = (rel: keyof typeof SCALE_VALUES, cred: keyof typeof SCALE_VALUES) => {
+      setForm(prev => ({ ...prev, reliability: rel, credibility: cred }));
+    };
+
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => { setIsSourceModalOpen(false); setEditingSource(null); }} />
-        <div className="relative bg-slate-900 border border-slate-800 w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
+        <div className="relative bg-slate-900 border border-slate-800 w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
           <div className="px-8 py-6 border-b border-slate-800 flex justify-between items-center bg-slate-800/20">
-            <h3 className="font-bold text-xl flex items-center gap-3"><Search className="w-6 h-6 text-emerald-500" /> {editingSource ? 'Editar Fonte' : 'Nova Fonte de Coleta'}</h3>
+            <h3 className="font-bold text-xl flex items-center gap-3"><Search className="w-6 h-6 text-emerald-500" /> {editingSource ? 'Editar Fonte' : 'Nova Coleta e Fonte'}</h3>
             <button onClick={() => { setIsSourceModalOpen(false); setEditingSource(null); }}><X className="w-6 h-6 text-slate-500" /></button>
           </div>
-          <div className="p-8 space-y-6">
-            <div className="grid grid-cols-2 gap-5">
+          <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8 max-h-[75vh] overflow-y-auto">
+            <div className="space-y-6">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nome da Fonte</label>
-                <input type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-emerald-500" placeholder="Ex: ThreatFeeds.io" />
+                <input type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-emerald-500" placeholder="Ex: Shodan.io" />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Tipo</label>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Tipo de Coleta</label>
                 <select value={form.type} onChange={e => setForm({...form, type: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-emerald-500">
-                  <option value="OSINT">OSINT</option><option value="FeedComercial">Comercial</option><option value="Internal">Interna</option><option value="DarkWeb">Dark Web</option>
+                  <option value="OSINT">OSINT</option><option value="FeedComercial">Feed Comercial</option><option value="Internal">Interna</option><option value="DarkWeb">Dark Web</option><option value="FeedAberto">Feed Aberto</option>
                 </select>
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-5">
+              
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Confiabilidade (Admiralty)</label>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Confiabilidade Admiralty (A-F)</label>
                 <select value={form.reliability} onChange={e => setForm({...form, reliability: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-emerald-500">
-                   <option value="A">A - Completamente Confiável</option><option value="B">B - Geralmente Confiável</option><option value="C">C - Razoável</option>
+                   {SCALE_ORDER.map(s => <option key={s} value={s}>{s} - {SCALE_LABELS.reliability[s]}</option>)}
                 </select>
               </div>
+
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Confiança (0-100)</label>
-                <input type="number" value={form.confidence} onChange={e => setForm({...form, confidence: parseInt(e.target.value)})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-emerald-500" />
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Credibilidade Admiralty (A-F)</label>
+                <select value={form.credibility} onChange={e => setForm({...form, credibility: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-emerald-500">
+                   {SCALE_ORDER.map(s => <option key={s} value={s}>{s} - {SCALE_LABELS.credibility[s]}</option>)}
+                </select>
               </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Vincular a PIR</label>
-              <select value={form.pirId} onChange={e => setForm({...form, pirId: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-emerald-500">
-                {activeClient?.phases.planning.pirs.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-              </select>
+
+            <div className="bg-slate-950/50 rounded-3xl p-6 border border-slate-800 flex flex-col items-center justify-center">
+              <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6">Matriz de Inteligência 6x6</h4>
+              <div className="grid grid-cols-7 gap-1">
+                <div />
+                {SCALE_ORDER.map(s => <div key={s} className="w-6 h-6 text-[8px] flex items-center justify-center font-black text-slate-600">{s}</div>)}
+                {SCALE_ORDER.map(r => (
+                  <React.Fragment key={r}>
+                    <div className="w-6 h-6 text-[8px] flex items-center justify-center font-black text-slate-600">{r}</div>
+                    {SCALE_ORDER.map(c => (
+                      <div 
+                        key={c} 
+                        onClick={() => handleMatrixClick(r, c)}
+                        className={`w-6 h-6 rounded-sm border border-slate-900 transition-all cursor-pointer hover:border-white/20 ${
+                          form.reliability === r && form.credibility === c 
+                            ? `${getScoreColor(r, c)} shadow-[0_0_10px_rgba(255,255,255,0.2)] scale-110 z-10` 
+                            : 'bg-slate-800/20'
+                        }`}
+                      />
+                    ))}
+                  </React.Fragment>
+                ))}
+              </div>
+              <div className="mt-8 text-center">
+                <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-1">Pontuação de Matriz</p>
+                <p className={`text-4xl font-black ${form.reliability === 'A' && form.credibility === 'A' ? 'text-emerald-400' : 'text-slate-100'}`}>
+                  {form.reliability}{form.credibility}
+                </p>
+              </div>
             </div>
           </div>
           <div className="px-8 py-6 bg-slate-800/20 border-t border-slate-800 flex justify-end gap-4">
@@ -840,9 +907,7 @@ export default function App() {
                             <div className="flex items-center gap-2 text-[10px] text-slate-500 font-bold uppercase">
                                <span>{s.type}</span>
                                <span className="w-1 h-1 bg-slate-700 rounded-full" />
-                               <span>Rel: {s.reliability}</span>
-                               <span className="w-1 h-1 bg-slate-700 rounded-full" />
-                               <span>Conf: {s.confidence}%</span>
+                               <span className="text-emerald-400">ADMIRALTY: {s.reliability}{s.credibility}</span>
                             </div>
                          </div>
                       </div>

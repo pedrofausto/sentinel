@@ -21,9 +21,9 @@ export interface IntelligenceSource {
   pirId: string; // Relationship with PIR
   name: string;
   type: 'Internal' | 'OSINT' | 'FeedComercial' | 'FeedAberto' | 'DarkWeb';
-  confidence: number; // 0-100 (OpenCTI standard)
+  credibility: 'A' | 'B' | 'C' | 'D' | 'E' | 'F'; // Credibility scale A-F
+  reliability: 'A' | 'B' | 'C' | 'D' | 'E' | 'F'; // Reliability scale A-F
   integrationDate: string;
-  reliability: 'A' | 'B' | 'C' | 'D' | 'E' | 'F'; // Admiralty Scale
 }
 
 export interface MetricRecord {
