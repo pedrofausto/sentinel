@@ -1088,29 +1088,64 @@ export default function App() {
           );
         case 'collection':
           return (
-            <div className="space-y-4">
-              {activeClient.phases.collection.sources.map(s => (
-                <div key={s.id} className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl hover:border-emerald-500/30 transition-all group">
-                   <div className="flex justify-between items-center">
+            <div className="space-y-8">
+              {activeClient.phases.planning.pirs.map(pir => {
+                const pirSources = activeClient.phases.collection.sources.filter(s => s.pirId === pir.id);
+                return (
+                  <div key={pir.id} className="bg-slate-900/40 border border-slate-800/50 rounded-3xl p-6 shadow-xl">
+                    <div className="flex justify-between items-center mb-6 border-b border-slate-800/50 pb-4">
                       <div className="flex items-center gap-4">
-                         <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg"><Globe className="w-4 h-4" /></div>
-                         <div>
-                            <h4 className="font-bold text-slate-100">{s.name}</h4>
-                            <div className="flex items-center gap-2 text-[10px] text-slate-500 font-bold uppercase">
-                               <span>{s.type}</span>
-                               <span className="w-1 h-1 bg-slate-700 rounded-full" />
-                               <span className="text-emerald-400">ADMIRALTY: {s.reliability}{s.credibility}</span>
-                            </div>
-                         </div>
+                        <div className="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-2xl"><TargetIcon className="w-5 h-5" /></div>
+                        <div>
+                          <h4 className="font-bold text-slate-100 uppercase tracking-tight">{pir.title}</h4>
+                          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{pirSources.length} FONTES DE COLETA</span>
+                        </div>
                       </div>
-                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditingSource(s); setIsSourceModalOpen(true); }} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400"><Edit2 className="w-4 h-4" /></button>
-                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteSource(s.id); }} className="p-2 hover:bg-rose-500/10 rounded-lg text-slate-500 hover:text-rose-400"><Trash2 className="w-4 h-4" /></button>
-                      </div>
-                   </div>
-                </div>
-              ))}
-              <button onClick={() => { setEditingSource(null); setIsSourceModalOpen(true); }} className="w-full py-6 border-2 border-dashed border-slate-800 rounded-2xl text-slate-500 hover:text-emerald-400 hover:border-emerald-500/50 transition-all text-xs font-black uppercase tracking-widest">+ Adicionar Coleta e Fonte</button>
+                      <button 
+                        onClick={() => { setSourceModalPirId(pir.id); setEditingSource(null); setIsSourceModalOpen(true); }}
+                        className="p-2 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-xl transition-all"
+                        title="Adicionar Fonte para este PIR"
+                      >
+                        <Plus className="w-5 h-5" />
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      {pirSources.map(s => (
+                        <div key={s.id} className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl hover:border-emerald-500/30 transition-all group">
+                           <div className="flex justify-between items-center">
+                              <div className="flex items-center gap-4">
+                                 <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg"><Globe className="w-4 h-4" /></div>
+                                 <div>
+                                    <h4 className="font-bold text-slate-100">{s.name}</h4>
+                                    <div className="flex items-center gap-2 text-[10px] text-slate-500 font-bold uppercase">
+                                       <span>{s.type}</span>
+                                       <span className="w-1 h-1 bg-slate-700 rounded-full" />
+                                       <span className="text-emerald-400">ADMIRALTY: {s.reliability}{s.credibility}</span>
+                                    </div>
+                                 </div>
+                              </div>
+                              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditingSource(s); setIsSourceModalOpen(true); }} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400"><Edit2 className="w-4 h-4" /></button>
+                                <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteSource(s.id); }} className="p-2 hover:bg-rose-500/10 rounded-lg text-slate-500 hover:text-rose-400"><Trash2 className="w-4 h-4" /></button>
+                              </div>
+                           </div>
+                        </div>
+                      ))}
+                      {pirSources.length === 0 && (
+                        <p className="text-center py-6 text-slate-600 italic text-xs">Nenhuma fonte de coleta vinculada a este PIR ainda.</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              
+              <button 
+                onClick={() => { setSourceModalPirId(null); setEditingSource(null); setIsSourceModalOpen(true); }} 
+                className="w-full py-6 border-2 border-dashed border-slate-800 rounded-3xl text-slate-500 hover:text-emerald-400 hover:border-emerald-500/50 transition-all text-xs font-black uppercase tracking-widest"
+              >
+                + Adicionar Fonte Geral
+              </button>
             </div>
           );
         case 'analysis':
