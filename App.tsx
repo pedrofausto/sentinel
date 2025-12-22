@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-  Shield, 
   Users, 
   ChevronRight, 
   ChevronLeft,
@@ -52,9 +51,11 @@ import {
   Send,
   Loader2,
   TrendingUp,
-  ShieldCheck,
   Zap,
-  Target as TargetIcon
+  Target as TargetIcon,
+  Lock,
+  LogIn,
+  LogOut
 } from 'lucide-react';
 import { ClientData, CTIPhase, PIR, IntelligenceSource, Report, StatusHistory, MetricRecord, DisseminationLog } from './types';
 import { PHASE_CONFIG } from './constants';
@@ -64,6 +65,8 @@ import {
   AreaChart, Area, BarChart as ReBarChart, Bar, Cell, Legend,
   PieChart, Pie
 } from 'recharts';
+
+const LOGO_URL = "https://shieldsec.com.br/wp-content/uploads/2024/04/shield.png";
 
 const INITIAL_CLIENTS: ClientData[] = [
   {
@@ -165,6 +168,7 @@ const SCALE_VALUES = { A: 6, B: 5, C: 4, D: 3, E: 2, F: 1 };
 const SCALE_ORDER: (keyof typeof SCALE_VALUES)[] = ['A', 'B', 'C', 'D', 'E', 'F'];
 
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [clients, setClients] = useState<ClientData[]>(INITIAL_CLIENTS);
   const [activeClientId, setActiveClientId] = useState<string | null>(INITIAL_CLIENTS[0].id);
   const [activePhase, setActivePhase] = useState<CTIPhase | 'dashboard' | 'cases'>('dashboard');
@@ -198,7 +202,6 @@ export default function App() {
   const [analysisModalPirId, setAnalysisModalPirId] = useState<string | null>(null);
   const [disseminationModalPirId, setDisseminationModalPirId] = useState<string | null>(null);
 
-  // New confirmation state
   const [confirmState, setConfirmState] = useState<{
     isOpen: boolean;
     title: string;
@@ -567,6 +570,113 @@ export default function App() {
 
   // --- UI Components ---
 
+  const LoginScreen = () => {
+    const [user, setUser] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleLogin = (e: React.FormEvent) => {
+      e.preventDefault();
+      setLoading(true);
+      setError('');
+      
+      // Mock Authentication Logic
+      setTimeout(() => {
+        if (user === 'admin' && password === 'admin') {
+          setIsAuthenticated(true);
+        } else {
+          setError('Credenciais inválidas. Verifique usuário e senha.');
+        }
+        setLoading(false);
+      }, 1000);
+    };
+
+    return (
+      <div className="min-h-screen w-full bg-slate-950 flex items-center justify-center p-6 relative overflow-hidden">
+        {/* Background blobs for aesthetics */}
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-600/10 rounded-full blur-[120px] animate-pulse"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-rose-600/10 rounded-full blur-[120px] animate-pulse delay-700"></div>
+        
+        <div className="w-full max-w-md animate-in fade-in zoom-in duration-500 relative z-10">
+          <div className="bg-slate-900/40 border border-slate-800/50 backdrop-blur-3xl rounded-[3rem] p-10 shadow-2xl overflow-hidden">
+            <div className="text-center mb-10">
+              <div className="inline-flex p-4 bg-white/5 border border-white/10 rounded-[1.5rem] shadow-2xl mb-6 rotate-3">
+                <img src={LOGO_URL} alt="ShieldSec Logo" className="w-12 h-12 object-contain" />
+              </div>
+              <h1 className="text-3xl font-black text-white tracking-tighter uppercase italic">Sentinel CTI</h1>
+              <p className="text-slate-500 font-bold text-xs uppercase tracking-[0.2em] mt-2">Intelligence Lifecycle Management</p>
+            </div>
+
+            <form onSubmit={handleLogin} className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Identificação do Analista</label>
+                <div className="relative group">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400 transition-colors">
+                    <User className="w-4 h-4" />
+                  </div>
+                  <input 
+                    type="text" 
+                    value={user} 
+                    onChange={e => setUser(e.target.value)}
+                    className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-sm text-white focus:border-indigo-500 transition-all outline-none" 
+                    placeholder="usuário"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Código de Acesso</label>
+                <div className="relative group">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400 transition-colors">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <input 
+                    type="password" 
+                    value={password} 
+                    onChange={e => setPassword(e.target.value)}
+                    className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-sm text-white focus:border-indigo-500 transition-all outline-none" 
+                    placeholder="••••••••"
+                    required
+                  />
+                </div>
+              </div>
+
+              {error && (
+                <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-4 flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+                  <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                  <p className="text-[11px] font-bold text-rose-500">{error}</p>
+                </div>
+              )}
+
+              <button 
+                type="submit" 
+                disabled={loading}
+                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-widest py-4 rounded-2xl shadow-xl shadow-indigo-900/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />}
+                Autenticar no Sistema
+              </button>
+            </form>
+
+            <div className="mt-10 pt-8 border-t border-slate-800/50 text-center">
+              <p className="text-[10px] text-slate-600 font-bold uppercase tracking-widest flex items-center justify-center gap-2">
+                <Zap className="w-3 h-3" /> Sentinel v2.5 Enterprise Intelligence
+              </p>
+            </div>
+          </div>
+          
+          <div className="mt-8 text-center px-10">
+            <p className="text-xs text-slate-500 leading-relaxed italic opacity-50">
+              "A inteligência é o que nos permite ver as ameaças antes que elas se tornem incidentes."
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const ConfirmationModal = () => {
     if (!confirmState || !confirmState.isOpen) return null;
     return (
@@ -688,16 +798,16 @@ export default function App() {
               {form.hasIncident && (
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Início do Incidente</label>
-                  <input type="datetime-local" value={form.incidentDate} onChange={e => setForm({...form, incidentDate: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white focus:border-rose-500 outline-none" />
+                  <input type="datetime-local" value={form.incidentDate} onChange={e => setForm({...form, incidentDate: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white focus:border-rose-500 outline-none" />
                 </div>
               )}
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Data da Descoberta</label>
-                <input type="datetime-local" value={form.discoveryDate} onChange={e => setForm({...form, discoveryDate: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white focus:border-rose-500 outline-none" />
+                <input type="datetime-local" value={form.discoveryDate} onChange={e => setForm({...form, discoveryDate: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white focus:border-rose-500 outline-none" />
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Data da Disseminação</label>
-                <input type="datetime-local" value={form.disseminationDate} onChange={e => setForm({...form, disseminationDate: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white focus:border-rose-500 outline-none" />
+                <input type="datetime-local" value={form.disseminationDate} onChange={e => setForm({...form, disseminationDate: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white focus:border-rose-500 outline-none" />
               </div>
             </div>
             <div className="flex flex-col gap-3 pt-2">
@@ -733,25 +843,25 @@ export default function App() {
           <div className="p-8 space-y-6">
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Título do Requisito</label>
-              <input type="text" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-blue-500" placeholder="Ex: Monitoramento de Phishing" />
+              <input type="text" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-blue-500" placeholder="Ex: Monitoramento de Phishing" />
             </div>
             <div className="grid grid-cols-2 gap-5">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Prioridade</label>
-                <select value={form.priority} onChange={e => setForm({...form, priority: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-blue-500">
+                <select value={form.priority} onChange={e => setForm({...form, priority: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-blue-500">
                   <option value="High">Alta</option><option value="Medium">Média</option><option value="Low">Baixa</option>
                 </select>
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Status</label>
-                <select value={form.status} onChange={e => setForm({...form, status: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-blue-500">
+                <select value={form.status} onChange={e => setForm({...form, status: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-blue-500">
                   <option value="Active">Ativo</option><option value="Draft">Rascunho</option><option value="Archived">Arquivado</option>
                 </select>
               </div>
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Descrição</label>
-              <textarea rows={4} value={form.description} onChange={e => setForm({...form, description: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-blue-500 resize-none" placeholder="O que precisamos saber sobre esta ameaça?" />
+              <textarea rows={4} value={form.description} onChange={e => setForm({...form, description: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-blue-500 resize-none" placeholder="O que precisamos saber sobre esta ameaça?" />
             </div>
           </div>
           <div className="px-8 py-6 bg-slate-800/20 border-t border-slate-800 flex justify-end gap-4">
@@ -796,25 +906,25 @@ export default function App() {
             <div className="space-y-6">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nome da Fonte</label>
-                <input type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-emerald-500" placeholder="Ex: Shodan.io" />
+                <input type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-emerald-500" placeholder="Ex: Shodan.io" />
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Tipo de Coleta</label>
-                <select value={form.type} onChange={e => setForm({...form, type: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-emerald-500">
+                <select value={form.type} onChange={e => setForm({...form, type: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-emerald-500">
                   <option value="OSINT">OSINT</option><option value="FeedComercial">Feed Comercial</option><option value="Internal">Interna</option><option value="DarkWeb">Dark Web</option><option value="FeedAberto">Feed Aberto</option>
                 </select>
               </div>
               
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Confiabilidade Admiralty (A-F)</label>
-                <select value={form.reliability} onChange={e => setForm({...form, reliability: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-emerald-500">
+                <select value={form.reliability} onChange={e => setForm({...form, reliability: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-emerald-500">
                    {SCALE_ORDER.map(s => <option key={s} value={s}>{s} - {SCALE_LABELS.reliability[s]}</option>)}
                 </select>
               </div>
 
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Credibilidade Admiralty (A-F)</label>
-                <select value={form.credibility} onChange={e => setForm({...form, credibility: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-emerald-500">
+                <select value={form.credibility} onChange={e => setForm({...form, credibility: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-emerald-500">
                    {SCALE_ORDER.map(s => <option key={s} value={s}>{s} - {SCALE_LABELS.credibility[s]}</option>)}
                 </select>
               </div>
@@ -873,24 +983,24 @@ export default function App() {
             <div className="grid grid-cols-2 gap-5">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Título</label>
-                <input type="text" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-amber-500" placeholder="Ex: Análise Campanha Q2" />
+                <input type="text" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-amber-500" placeholder="Ex: Análise Campanha Q2" />
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Tipo</label>
-                <select value={form.type} onChange={e => setForm({...form, type: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-amber-500">
+                <select value={form.type} onChange={e => setForm({...form, type: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-amber-500">
                   <option value="Operational">Operacional</option><option value="Strategic">Estratégico</option><option value="Tactical">Tático</option>
                 </select>
               </div>
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Vincular a PIR</label>
-              <select value={form.pirId} onChange={e => setForm({...form, pirId: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-amber-500">
+              <select value={form.pirId} onChange={e => setForm({...form, pirId: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-amber-500">
                 {activeClient?.phases.planning.pirs.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
               </select>
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Conteúdo</label>
-              <textarea rows={5} value={form.content} onChange={e => setForm({...form, content: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-amber-500 resize-none" placeholder="Sumário executivo e descobertas técnicas..." />
+              <textarea rows={5} value={form.content} onChange={e => setForm({...form, content: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-amber-500 resize-none" placeholder="Sumário executivo e descobertas técnicas..." />
             </div>
           </div>
           <div className="px-8 py-6 bg-slate-800/20 border-t border-slate-800 flex justify-end gap-4">
@@ -934,7 +1044,7 @@ export default function App() {
           <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Vincular a PIR</label>
-              <select value={form.pirId} onChange={e => setForm({...form, pirId: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500">
+              <select value={form.pirId} onChange={e => setForm({...form, pirId: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-purple-500">
                 <option value="">Selecione um PIR...</option>
                 {activeClient?.phases.planning.pirs.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
               </select>
@@ -942,32 +1052,32 @@ export default function App() {
             <div className="grid grid-cols-2 gap-5">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Data</label>
-                <input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500" />
+                <input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-purple-500" />
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nível</label>
-                <select value={form.type} onChange={e => setForm({...form, type: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500">
+                <select value={form.type} onChange={e => setForm({...form, type: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-purple-500">
                   <option value="Tactical">Tático</option><option value="Operational">Operacional</option><option value="Strategic">Estratégico</option>
                 </select>
               </div>
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nome do Report/Arquivo</label>
-              <input type="text" value={form.reportName} onChange={e => setForm({...form, reportName: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500" placeholder="Ex: IOC_Feed_May.csv" />
+              <input type="text" value={form.reportName} onChange={e => setForm({...form, reportName: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-purple-500" placeholder="Ex: IOC_Feed_May.csv" />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Canal de Envio (Email)</label>
-                <input type="email" value={form.deliveryChannel} onChange={e => { setForm({...form, deliveryChannel: e.target.value}); setError(''); }} className={`w-full bg-slate-950 border ${error.includes('e-mail') ? 'border-rose-500' : 'border-slate-800'} rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500`} placeholder="ex: soc@empresa.com" />
+                <input type="email" value={form.deliveryChannel} onChange={e => { setForm({...form, deliveryChannel: e.target.value}); setError(''); }} className={`w-full bg-slate-950 border ${error.includes('e-mail') ? 'border-rose-500' : 'border-slate-800'} rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-purple-500`} placeholder="ex: soc@empresa.com" />
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Time Notificado</label>
-                <input type="text" value={form.notifiedTeam} onChange={e => setForm({...form, notifiedTeam: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500" placeholder="ex: SOC N2, Incident Response" />
+                <input type="text" value={form.notifiedTeam} onChange={e => setForm({...form, notifiedTeam: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-purple-500" placeholder="ex: SOC N2, Incident Response" />
               </div>
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Demais Observações</label>
-              <textarea rows={3} value={form.observations} onChange={e => setForm({...form, observations: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500 resize-none" placeholder="Contexto adicional da disseminação..." />
+              <textarea rows={3} value={form.observations} onChange={e => setForm({...form, observations: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-purple-500 resize-none" placeholder="Contexto adicional da disseminação..." />
             </div>
             {error && <p className="text-xs text-rose-500 font-bold flex items-center gap-2"><AlertCircle className="w-4 h-4" /> {error}</p>}
           </div>
@@ -1287,7 +1397,7 @@ export default function App() {
 
   const NavItem = ({ active, onClick, icon, label, color = 'indigo' }: any) => {
     const variant = COLOR_VARIANTS[color] || COLOR_VARIANTS.indigo;
-    return (<button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all group ${active ? `${variant.bg} ${variant.text} border ${variant.border} shadow-lg shadow-${color}-500/10` : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'}`}><div className={`shrink-0 ${active ? variant.text : 'text-slate-500 group-hover:text-slate-300'}`}>{icon}</div><span className="text-sm font-bold tracking-tight">{label}</span></button>);
+    return (<button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-4 rounded-2xl transition-all group ${active ? `${variant.bg} ${variant.text} border ${variant.border} shadow-lg shadow-${color}-500/10` : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'}`}><div className={`shrink-0 ${active ? variant.text : 'text-slate-500 group-hover:text-slate-300'}`}>{icon}</div><span className="text-sm font-bold tracking-tight">{label}</span></button>);
   }
 
   const StatCard = ({ title, value, color, description }: any) => {
@@ -1375,7 +1485,9 @@ export default function App() {
             </div>
           </div>
           <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl flex flex-col items-center">
-            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6 flex items-center gap-2"><ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> Resultado Operacional</h4>
+            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+              <img src={LOGO_URL} alt="ShieldSec Icon" className="w-3.5 h-3.5 object-contain grayscale brightness-125" /> Resultado Operacional
+            </h4>
             <div className="h-40 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -1461,7 +1573,7 @@ export default function App() {
                       <td className="py-5 px-6">
                         {m.incidentPrevented ? (
                           <div className="flex items-center gap-2 text-emerald-400 font-bold bg-emerald-400/5 border border-emerald-400/10 px-3 py-1.5 rounded-xl w-fit">
-                            <ShieldCheck className="w-4 h-4" /> Mitigado
+                            <img src={LOGO_URL} alt="Mitigated" className="w-4 h-4 object-contain grayscale brightness-200" /> Mitigado
                           </div>
                         ) : (
                           <div className="flex items-center gap-2 text-rose-500 font-bold bg-rose-500/5 border border-rose-500/10 px-3 py-1.5 rounded-xl w-fit">
@@ -1490,6 +1602,10 @@ export default function App() {
     );
   };
 
+  if (!isAuthenticated) {
+    return <LoginScreen />;
+  }
+
   return (
     <div className="flex h-screen w-full overflow-hidden bg-slate-950 text-slate-100 font-sans">
       {isMetricModalOpen && <MetricEntryModal />}
@@ -1502,8 +1618,8 @@ export default function App() {
 
       <aside className={`bg-slate-900/60 border-r border-slate-800/50 transition-all duration-500 flex flex-col z-20 backdrop-blur-2xl ${isSidebarOpen ? 'w-80' : 'w-0 -translate-x-full overflow-hidden'}`}>
         <div className="p-10 flex items-center gap-4 border-b border-slate-800/30">
-          <div className="bg-indigo-600 p-3 rounded-[1.25rem] shadow-2xl shadow-indigo-600/30 rotate-3 group-hover:rotate-0 transition-transform">
-            <Shield className="w-7 h-7 text-white" />
+          <div className="bg-white/5 border border-white/10 p-2.5 rounded-[1.25rem] shadow-2xl rotate-3 group-hover:rotate-0 transition-transform">
+            <img src={LOGO_URL} alt="Sentinel Logo" className="w-8 h-8 object-contain" />
           </div>
           <span className="font-black text-2xl tracking-tighter text-white uppercase italic">Sentinel</span>
         </div>
@@ -1546,6 +1662,16 @@ export default function App() {
               </div>
             </div>
           </nav>
+        </div>
+
+        <div className="p-6 border-t border-slate-800/30">
+          <button 
+            onClick={() => setIsAuthenticated(false)}
+            className="w-full flex items-center gap-3 px-5 py-4 rounded-[1.25rem] text-sm font-bold text-slate-500 hover:bg-rose-500/10 hover:text-rose-500 transition-all group"
+          >
+            <LogOut className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+            Sair do Terminal
+          </button>
         </div>
       </aside>
       
