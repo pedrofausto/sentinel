@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Users, 
@@ -55,7 +54,9 @@ import {
   Target as TargetIcon,
   Lock,
   LogIn,
-  LogOut
+  LogOut,
+  BrainCircuit,
+  PlusCircle
 } from 'lucide-react';
 import { ClientData, CTIPhase, PIR, IntelligenceSource, Report, StatusHistory, MetricRecord, DisseminationLog } from './types';
 import { PHASE_CONFIG } from './constants';
@@ -105,8 +106,8 @@ const INITIAL_CLIENTS: ClientData[] = [
       },
       collection: { 
         sources: [
-          { id: 's1', pirId: 'p1', name: 'AbuseIPDB', type: 'OSINT', credibility: 'B', reliability: 'B', integrationDate: '2024-01-15' },
-          { id: 's2', pirId: 'p2', name: 'Flashpoint', type: 'FeedComercial', credibility: 'A', reliability: 'A', integrationDate: '2024-02-10' }
+          { id: 's1', pirId: 'p1', name: 'AbuseIPDB', description: 'Banco de dados colaborativo de IPs maliciosos para enriquecimento de IOCs.', type: 'OSINT', credibility: 'B', reliability: 'B', integrationDate: '2024-01-15' },
+          { id: 's2', pirId: 'p2', name: 'Flashpoint', description: 'Monitoramento deep & dark web focado em fóruns de vazamento de credenciais.', type: 'FeedComercial', credibility: 'A', reliability: 'A', integrationDate: '2024-02-10' }
         ]
       },
       analysis: { 
@@ -119,7 +120,7 @@ const INITIAL_CLIENTS: ClientData[] = [
         integrations: ['Slack', 'Jira'], 
         alertsCount: 1250,
         logs: [
-          { id: 'l1', pirId: 'p1', date: '2024-05-15', type: 'Tactical', reportName: 'IOC_Feed_May_2024.pdf', deliveryChannel: 'soc@fintech.global', notifiedTeam: 'SOC N2', observations: 'Enviado para o time de SOC e Resposta a Incidentes.' }
+          { id: 'l1', pirId: 'p1', reportId: 'r1', status: 'Pending', date: '2024-05-15', type: 'Tactical', reportName: 'Análise de Campanha Phishing Pix Q1', deliveryChannel: 'soc@fintech.global', notifiedTeam: 'SOC N2', observations: 'Enviado para o time de SOC e Resposta a Incidentes.' }
         ]
       }
     },
@@ -173,8 +174,6 @@ export default function App() {
   const [activeClientId, setActiveClientId] = useState<string | null>(INITIAL_CLIENTS[0].id);
   const [activePhase, setActivePhase] = useState<CTIPhase | 'dashboard' | 'cases'>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [aiInsight, setAiInsight] = useState<string | null>(null);
-  const [loadingAi, setLoadingAi] = useState(false);
   
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -283,23 +282,6 @@ export default function App() {
         vinc_pir: activeClient.phases.planning.pirs.find(p => p.id === l.pirId)?.title
       }))
     }, null, 2);
-  };
-
-  const handleAiInsight = async () => {
-    if (!activeClient) return;
-    setLoadingAi(true);
-    setAiInsight(null);
-    try {
-      const context = getContextString();
-      const prompt = "Analise profundamente a eficácia do programa. Compare os incidentes reais com os PIRs mapeados. Identifique se o programa está sendo reativo ou proativo e sugira 3 ações estratégicas baseadas nos dados de desempenho.";
-      const result = await generateCTIInsight(prompt, context);
-      setAiInsight(result);
-    } catch (e) { 
-      console.error(e); 
-      setAiInsight("Erro ao gerar correlação de dados.");
-    } finally { 
-      setLoadingAi(false); 
-    }
   };
 
   const handleSendMessage = async () => {
@@ -458,7 +440,7 @@ export default function App() {
     setConfirmState({
       isOpen: true,
       title: "Excluir Relatório",
-      message: "Este relatório de análise será apagado permanentemente. Confirmar?",
+      message: "Este relatório de análise será apagado permanentemente. A disseminação obrigatória vinculada também será removida. Confirmar?",
       confirmText: "Excluir Relatório",
       variant: "danger",
       onConfirm: () => {
@@ -471,6 +453,10 @@ export default function App() {
               analysis: {
                 ...c.phases.analysis,
                 reports: c.phases.analysis.reports.filter(r => r.id !== id)
+              },
+              dissemination: {
+                ...c.phases.dissemination,
+                logs: c.phases.dissemination.logs.filter(l => l.reportId !== id)
               }
             }
           };
@@ -482,6 +468,18 @@ export default function App() {
 
   const handleDeleteDissemination = (id: string) => {
     if (!activeClientId) return;
+    const logToDelete = activeClient?.phases.dissemination.logs.find(l => l.id === id);
+    if (logToDelete?.reportId) {
+        setConfirmState({
+            isOpen: true,
+            title: "Ação não permitida",
+            message: "Esta disseminação é obrigatória pois está vinculada a uma Análise. Para removê-la, você deve excluir o relatório de análise correspondente.",
+            isAlert: true,
+            onConfirm: () => setConfirmState(null)
+        });
+        return;
+    }
+
     setConfirmState({
       isOpen: true,
       title: "Excluir Log",
@@ -507,6 +505,23 @@ export default function App() {
     });
   };
 
+  const handleUpdateDisseminationStatus = (id: string, newStatus: DisseminationLog['status']) => {
+    if (!activeClientId) return;
+    setClients(prev => prev.map(c => {
+      if (c.id !== activeClientId) return c;
+      return {
+        ...c,
+        phases: {
+          ...c.phases,
+          dissemination: {
+            ...c.phases.dissemination,
+            logs: c.phases.dissemination.logs.map(l => l.id === id ? { ...l, status: newStatus } : l)
+          }
+        }
+      };
+    }));
+  };
+
   const handleAddOrEditSource = (source: Omit<IntelligenceSource, 'id'>) => {
     if (!activeClientId) return;
     setClients(prev => prev.map(c => {
@@ -520,14 +535,51 @@ export default function App() {
     setEditingSource(null);
   };
 
-  const handleAddOrEditAnalysis = (report: Omit<Report, 'id'>) => {
+  // Improved handleAddOrEditAnalysis to accept status from form
+  const handleAddOrEditAnalysis = (report: Omit<Report, 'id'>, status?: DisseminationLog['status']) => {
     if (!activeClientId) return;
     setClients(prev => prev.map(c => {
       if (c.id !== activeClientId) return c;
-      const updatedReports = editingAnalysis
-        ? c.phases.analysis.reports.map(r => r.id === editingAnalysis.id ? { ...report, id: editingAnalysis.id } : r)
-        : [...c.phases.analysis.reports, { ...report, id: Math.random().toString(36).substr(2, 9) }];
-      return { ...c, phases: { ...c.phases, analysis: { ...c.phases.analysis, reports: updatedReports } } };
+      
+      let updatedReports = [...c.phases.analysis.reports];
+      let updatedLogs = [...c.phases.dissemination.logs];
+      
+      if (editingAnalysis) {
+        updatedReports = updatedReports.map(r => {
+          if (r.id === editingAnalysis.id) {
+            // Atualiza os dados do log vinculado se houver alteração no relatório
+            updatedLogs = updatedLogs.map(l => 
+              l.reportId === editingAnalysis.id ? { ...l, reportName: report.title, type: report.type, status: status || l.status } : l
+            );
+            return { ...report, id: editingAnalysis.id };
+          }
+          return r;
+        });
+      } else {
+        const reportId = Math.random().toString(36).substr(2, 9);
+        updatedReports.push({ ...report, id: reportId });
+        
+        // CRIAÇÃO OBRIGATÓRIA DA DISSEMINAÇÃO
+        updatedLogs.push({
+          id: Math.random().toString(36).substr(2, 9),
+          pirId: report.pirId,
+          reportId: reportId,
+          date: new Date().toISOString().split('T')[0],
+          type: report.type,
+          status: status || 'Pending',
+          reportName: report.title,
+          observations: 'Gerado automaticamente: Disseminação obrigatória para nova análise.'
+        });
+      }
+      
+      return { 
+        ...c, 
+        phases: { 
+          ...c.phases, 
+          analysis: { ...c.phases.analysis, reports: updatedReports },
+          dissemination: { ...c.phases.dissemination, logs: updatedLogs }
+        } 
+      };
     }));
     setIsAnalysisModalOpen(false);
     setEditingAnalysis(null);
@@ -568,8 +620,6 @@ export default function App() {
     setEditingDissemination(null);
   };
 
-  // --- UI Components ---
-
   const LoginScreen = () => {
     const [user, setUser] = useState('');
     const [password, setPassword] = useState('');
@@ -594,7 +644,6 @@ export default function App() {
 
     return (
       <div className="min-h-screen w-full bg-slate-950 flex items-center justify-center p-6 relative overflow-hidden">
-        {/* Background blobs for aesthetics */}
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-600/10 rounded-full blur-[120px] animate-pulse"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-rose-600/10 rounded-full blur-[120px] animate-pulse delay-700"></div>
         
@@ -676,13 +725,13 @@ export default function App() {
       </div>
     );
   };
-
+  
   const ConfirmationModal = () => {
     if (!confirmState || !confirmState.isOpen) return null;
     return (
       <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-xl animate-in fade-in duration-300" />
-        <div className="relative bg-slate-900 border border-slate-800 w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+        <div className="relative bg-slate-900 border border-slate-800 w-full max-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
           <div className="p-8 text-center">
             <div className={`w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center ${confirmState.variant === 'danger' ? 'bg-rose-500/10 text-rose-500' : 'bg-indigo-500/10 text-indigo-500'}`}>
               <AlertTriangle className="w-8 h-8" />
@@ -711,266 +760,31 @@ export default function App() {
     );
   };
 
-  const OrgModal = () => {
-    const [form, setForm] = useState({ 
-      name: editingOrg?.name || '', 
-      sector: editingOrg?.sector || '',
-      description: editingOrg?.description || '',
-      stakeholderName: editingOrg?.stakeholderName || '',
-      stakeholderEmail: editingOrg?.stakeholderEmail || ''
-    });
-    return (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => { setIsOrgModalOpen(false); setEditingOrg(null); }} />
-        <div className="relative bg-slate-900 border border-slate-800 w-full max-w-xl rounded-[2.5rem] shadow-2xl animate-in zoom-in-95 overflow-hidden">
-          <div className="px-8 py-6 border-b border-slate-800 flex justify-between items-center bg-slate-800/20">
-            <h3 className="font-bold text-xl flex items-center gap-3"><Globe className="w-6 h-6 text-indigo-400" /> {editingOrg ? 'Editar Organização' : 'Nova Organização'}</h3>
-            <button onClick={() => { setIsOrgModalOpen(false); setEditingOrg(null); }} className="p-2 hover:bg-slate-800 rounded-full transition-colors"><X className="w-6 h-6 text-slate-500" /></button>
-          </div>
-          <div className="p-8 space-y-6 max-h-[75vh] overflow-y-auto custom-scrollbar">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nome da Organização</label>
-                <input type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white focus:border-indigo-500 transition-all outline-none" placeholder="ex: Banco Central" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Setor / Indústria</label>
-                <input type="text" value={form.sector} onChange={e => setForm({...form, sector: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white focus:border-indigo-500 transition-all outline-none" placeholder="ex: Financeiro, Saúde" />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Descrição Estratégica</label>
-              <textarea rows={3} value={form.description} onChange={e => setForm({...form, description: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white resize-none focus:border-indigo-500 transition-all outline-none" placeholder="Área de atuação e ativos críticos..." />
-            </div>
-            <div className="border-t border-slate-800 pt-6">
-              <h4 className="text-xs font-black text-indigo-400 uppercase tracking-widest mb-5 flex items-center gap-2"><User className="w-4 h-4" /> Gestor Responsável</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nome Completo</label>
-                  <input type="text" value={form.stakeholderName} onChange={e => setForm({...form, stakeholderName: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white focus:border-indigo-500 outline-none" placeholder="ex: João Silva" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Email Corporativo</label>
-                  <input type="email" value={form.stakeholderEmail} onChange={e => setForm({...form, stakeholderEmail: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white focus:border-indigo-500 outline-none" placeholder="ex: joao@org.com" />
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="px-8 py-6 bg-slate-800/20 border-t border-slate-800 flex justify-end gap-4">
-            <button onClick={() => { setIsOrgModalOpen(false); setEditingOrg(null); }} className="text-sm text-slate-400 font-bold hover:text-white transition-colors">Cancelar</button>
-            <button onClick={() => handleAddOrEditOrg(form)} className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-2xl text-sm font-black shadow-xl shadow-indigo-900/20 transition-all active:scale-95">Salvar Organização</button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const MetricEntryModal = () => {
-    const [form, setForm] = useState<Omit<MetricRecord, 'id'>>(editingMetric ? { ...editingMetric } : { pirId: activeClient?.phases.planning.pirs[0]?.id || '', hasIncident: false, incidentDate: '', discoveryDate: new Date().toISOString().substring(0, 16), disseminationDate: new Date().toISOString().substring(0, 16), wasPreviouslyReported: false, incidentPrevented: false, impactScale: 'Medium' });
-    return (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => { setIsMetricModalOpen(false); setEditingMetric(null); }} />
-        <div className="relative bg-slate-900 border border-slate-800 w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
-          <div className="px-8 py-6 border-b border-slate-800 flex justify-between items-center bg-slate-800/20">
-            <h3 className="font-bold text-xl flex items-center gap-3"><Activity className="w-6 h-6 text-rose-500" /> {editingMetric ? 'Editar Registro' : 'Novo Registro de Caso'}</h3>
-            <button onClick={() => { setIsMetricModalOpen(false); setEditingMetric(null); }}><X className="w-6 h-6 text-slate-500" /></button>
-          </div>
-          <div className="p-8 space-y-6">
-            <div className="grid grid-cols-2 gap-5">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Vincular a PIR</label>
-                <select value={form.pirId} onChange={e => setForm({...form, pirId: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white focus:border-rose-500 outline-none">
-                  {activeClient?.phases.planning.pirs.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Severidade/Impacto</label>
-                <select value={form.impactScale} onChange={e => setForm({...form, impactScale: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white focus:border-rose-500 outline-none">
-                  <option value="Low">Baixo</option><option value="Medium">Médio</option><option value="High">Alto</option><option value="Critical">Crítico</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 py-2 bg-slate-950/50 p-4 rounded-2xl border border-slate-800">
-               <input type="checkbox" id="hasIncident" checked={form.hasIncident} onChange={e => setForm({...form, hasIncident: e.target.checked})} className="w-5 h-5 rounded-lg bg-slate-950 border-slate-800 text-rose-600 focus:ring-rose-600" />
-               <label htmlFor="hasIncident" className="text-sm text-slate-300 font-bold">Este caso foi um incidente de segurança real?</label>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {form.hasIncident && (
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Início do Incidente</label>
-                  <input type="datetime-local" value={form.incidentDate} onChange={e => setForm({...form, incidentDate: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white focus:border-rose-500 outline-none" />
-                </div>
-              )}
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Data da Descoberta</label>
-                <input type="datetime-local" value={form.discoveryDate} onChange={e => setForm({...form, discoveryDate: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white focus:border-rose-500 outline-none" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Data da Disseminação</label>
-                <input type="datetime-local" value={form.disseminationDate} onChange={e => setForm({...form, disseminationDate: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white focus:border-rose-500 outline-none" />
-              </div>
-            </div>
-            <div className="flex flex-col gap-3 pt-2">
-              <label className="flex items-center gap-3 cursor-pointer group">
-                <input type="checkbox" checked={form.wasPreviouslyReported} onChange={e => setForm({...form, wasPreviouslyReported: e.target.checked})} className="w-5 h-5 rounded-lg bg-slate-950 border-slate-800 text-indigo-600" />
-                <span className="text-sm text-slate-400 group-hover:text-slate-200 transition-colors">A ameaça já constava em nossos relatórios de inteligência?</span>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer group">
-                <input type="checkbox" checked={form.incidentPrevented} onChange={e => setForm({...form, incidentPrevented: e.target.checked})} className="w-5 h-5 rounded-lg bg-slate-950 border-slate-800 text-emerald-600" />
-                <span className="text-sm text-slate-400 group-hover:text-slate-200 transition-colors">Conseguimos mitigar ou impedir o dano total?</span>
-              </label>
-            </div>
-          </div>
-          <div className="px-8 py-6 bg-slate-800/20 border-t border-slate-800 flex justify-end gap-4">
-            <button onClick={() => { setIsMetricModalOpen(false); setEditingMetric(null); }} className="text-sm text-slate-400 font-bold">Cancelar</button>
-            <button onClick={() => handleAddOrEditMetric(form)} className="bg-rose-600 hover:bg-rose-500 text-white px-8 py-3 rounded-2xl text-sm font-black shadow-xl shadow-rose-900/20 transition-all">{editingMetric ? 'Atualizar' : 'Salvar Caso'}</button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const PirModal = () => {
-    const [form, setForm] = useState<Omit<PIR, 'id'>>(editingPir ? { ...editingPir } : { title: '', description: '', priority: 'Medium', status: 'Active' });
-    return (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => { setIsPirModalOpen(false); setEditingPir(null); }} />
-        <div className="relative bg-slate-900 border border-slate-800 w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
-          <div className="px-8 py-6 border-b border-slate-800 flex justify-between items-center bg-slate-800/20">
-            <h3 className="font-bold text-xl flex items-center gap-3"><TargetIcon className="w-6 h-6 text-blue-500" /> {editingPir ? 'Editar PIR' : 'Novo Requisito (PIR)'}</h3>
-            <button onClick={() => { setIsPirModalOpen(false); setEditingPir(null); }}><X className="w-6 h-6 text-slate-500" /></button>
-          </div>
-          <div className="p-8 space-y-6">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Título do Requisito</label>
-              <input type="text" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-blue-500" placeholder="Ex: Monitoramento de Phishing" />
-            </div>
-            <div className="grid grid-cols-2 gap-5">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Prioridade</label>
-                <select value={form.priority} onChange={e => setForm({...form, priority: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-blue-500">
-                  <option value="High">Alta</option><option value="Medium">Média</option><option value="Low">Baixa</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Status</label>
-                <select value={form.status} onChange={e => setForm({...form, status: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-blue-500">
-                  <option value="Active">Ativo</option><option value="Draft">Rascunho</option><option value="Archived">Arquivado</option>
-                </select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Descrição</label>
-              <textarea rows={4} value={form.description} onChange={e => setForm({...form, description: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-blue-500 resize-none" placeholder="O que precisamos saber sobre esta ameaça?" />
-            </div>
-          </div>
-          <div className="px-8 py-6 bg-slate-800/20 border-t border-slate-800 flex justify-end gap-4">
-            <button onClick={() => { setIsPirModalOpen(false); setEditingPir(null); }} className="text-sm text-slate-400 font-bold">Cancelar</button>
-            <button onClick={() => handleAddOrEditPir(form)} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-2xl text-sm font-black shadow-xl transition-all">Salvar PIR</button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const SourceModal = () => {
-    const [form, setForm] = useState<Omit<IntelligenceSource, 'id'>>(editingSource ? { ...editingSource } : { 
-      pirId: sourceModalPirId || activeClient?.phases.planning.pirs[0]?.id || '', 
-      name: '', 
-      type: 'OSINT', 
-      credibility: 'C', 
-      reliability: 'C', 
-      integrationDate: new Date().toISOString().split('T')[0] 
-    });
-
-    const getScoreColor = (rel: keyof typeof SCALE_VALUES, cred: keyof typeof SCALE_VALUES) => {
-      const sum = SCALE_VALUES[rel] + SCALE_VALUES[cred];
-      if (sum >= 10) return 'bg-emerald-500';
-      if (sum >= 7) return 'bg-amber-500';
-      return 'bg-rose-500';
-    };
-
-    const handleMatrixClick = (rel: keyof typeof SCALE_VALUES, cred: keyof typeof SCALE_VALUES) => {
-      setForm(prev => ({ ...prev, reliability: rel, credibility: cred }));
-    };
-
-    return (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => { setIsSourceModalOpen(false); setEditingSource(null); }} />
-        <div className="relative bg-slate-900 border border-slate-800 w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
-          <div className="px-8 py-6 border-b border-slate-800 flex justify-between items-center bg-slate-800/20">
-            <h3 className="font-bold text-xl flex items-center gap-3"><Search className="w-6 h-6 text-emerald-500" /> {editingSource ? 'Editar Fonte' : 'Nova Coleta e Fonte'}</h3>
-            <button onClick={() => { setIsSourceModalOpen(false); setEditingSource(null); }}><X className="w-6 h-6 text-slate-500" /></button>
-          </div>
-          <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8 max-h-[75vh] overflow-y-auto">
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nome da Fonte</label>
-                <input type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-emerald-500" placeholder="Ex: Shodan.io" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Tipo de Coleta</label>
-                <select value={form.type} onChange={e => setForm({...form, type: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-emerald-500">
-                  <option value="OSINT">OSINT</option><option value="FeedComercial">Feed Comercial</option><option value="Internal">Interna</option><option value="DarkWeb">Dark Web</option><option value="FeedAberto">Feed Aberto</option>
-                </select>
-              </div>
-              
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Confiabilidade Admiralty (A-F)</label>
-                <select value={form.reliability} onChange={e => setForm({...form, reliability: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-emerald-500">
-                   {SCALE_ORDER.map(s => <option key={s} value={s}>{s} - {SCALE_LABELS.reliability[s]}</option>)}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Credibilidade Admiralty (A-F)</label>
-                <select value={form.credibility} onChange={e => setForm({...form, credibility: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-emerald-500">
-                   {SCALE_ORDER.map(s => <option key={s} value={s}>{s} - {SCALE_LABELS.credibility[s]}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div className="bg-slate-950/50 rounded-3xl p-6 border border-slate-800 flex flex-col items-center justify-center">
-              <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6">Matriz de Inteligência 6x6</h4>
-              <div className="grid grid-cols-7 gap-1">
-                <div />
-                {SCALE_ORDER.map(s => <div key={s} className="w-6 h-6 text-[8px] flex items-center justify-center font-black text-slate-600">{s}</div>)}
-                {SCALE_ORDER.map(r => (
-                  <React.Fragment key={r}>
-                    <div className="w-6 h-6 text-[8px] flex items-center justify-center font-black text-slate-600">{r}</div>
-                    {SCALE_ORDER.map(c => (
-                      <div 
-                        key={c} 
-                        onClick={() => handleMatrixClick(r, c)}
-                        className={`w-6 h-6 rounded-sm border border-slate-900 transition-all cursor-pointer hover:border-white/20 ${
-                          form.reliability === r && form.credibility === c 
-                            ? `${getScoreColor(r, c)} shadow-[0_0_10px_rgba(255,255,255,0.2)] scale-110 z-10` 
-                            : 'bg-slate-800/20'
-                        }`}
-                      />
-                    ))}
-                  </React.Fragment>
-                ))}
-              </div>
-              <div className="mt-8 text-center">
-                <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-1">Pontuação de Matriz</p>
-                <p className={`text-4xl font-black ${form.reliability === 'A' && form.credibility === 'A' ? 'text-emerald-400' : 'text-slate-100'}`}>
-                  {form.reliability}{form.credibility}
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="px-8 py-6 bg-slate-800/20 border-t border-slate-800 flex justify-end gap-4">
-            <button onClick={() => { setIsSourceModalOpen(false); setEditingSource(null); }} className="text-sm text-slate-400 font-bold">Cancelar</button>
-            <button onClick={() => handleAddOrEditSource(form)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-3 rounded-2xl text-sm font-black shadow-xl transition-all">Salvar Fonte</button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   const AnalysisModal = () => {
-    const [form, setForm] = useState<Omit<Report, 'id'>>(editingAnalysis ? { ...editingAnalysis } : { pirId: analysisModalPirId || activeClient?.phases.planning.pirs[0]?.id || '', title: '', type: 'Operational', content: '', date: new Date().toISOString().split('T')[0] });
+    const associatedLog = useMemo(() => 
+      activeClient?.phases.dissemination.logs.find(l => l.reportId === editingAnalysis?.id), 
+      [activeClient, editingAnalysis]
+    );
+
+    const [form, setForm] = useState<{
+      pirId: string;
+      title: string;
+      type: Report['type'];
+      content: string;
+      date: string;
+      disseminationStatus: DisseminationLog['status'];
+    }>(editingAnalysis ? { 
+      ...editingAnalysis,
+      disseminationStatus: associatedLog?.status || 'Pending' 
+    } : { 
+      pirId: analysisModalPirId || activeClient?.phases.planning.pirs[0]?.id || '', 
+      title: '', 
+      type: 'Operational', 
+      content: '', 
+      date: new Date().toISOString().split('T')[0],
+      disseminationStatus: 'Pending'
+    });
+
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => { setIsAnalysisModalOpen(false); setEditingAnalysis(null); }} />
@@ -983,29 +797,39 @@ export default function App() {
             <div className="grid grid-cols-2 gap-5">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Título</label>
-                <input type="text" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-amber-500" placeholder="Ex: Análise Campanha Q2" />
+                <input type="text" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-amber-500" placeholder="Ex: Análise Campanha Q2" />
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Tipo</label>
-                <select value={form.type} onChange={e => setForm({...form, type: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-amber-500">
+                <select value={form.type} onChange={e => setForm({...form, type: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-amber-500">
                   <option value="Operational">Operacional</option><option value="Strategic">Estratégico</option><option value="Tactical">Tático</option>
                 </select>
               </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Vincular a PIR</label>
-              <select value={form.pirId} onChange={e => setForm({...form, pirId: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-amber-500">
-                {activeClient?.phases.planning.pirs.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-              </select>
+            <div className="grid grid-cols-2 gap-5">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Vincular a PIR</label>
+                <select value={form.pirId} onChange={e => setForm({...form, pirId: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-amber-500">
+                  {activeClient?.phases.planning.pirs.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Status da Disseminação</label>
+                <select value={form.disseminationStatus} onChange={e => setForm({...form, disseminationStatus: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-amber-500">
+                  <option value="Pending">Não Disseminada</option>
+                  <option value="Disseminated">Disseminada</option>
+                  <option value="Acknowledged">Reconhecida pelo Stakeholder</option>
+                </select>
+              </div>
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Conteúdo</label>
-              <textarea rows={5} value={form.content} onChange={e => setForm({...form, content: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-amber-500 resize-none" placeholder="Sumário executivo e descobertas técnicas..." />
+              <textarea rows={5} value={form.content} onChange={e => setForm({...form, content: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-amber-500 resize-none" placeholder="Sumário executivo e descobertas técnicas..." />
             </div>
           </div>
           <div className="px-8 py-6 bg-slate-800/20 border-t border-slate-800 flex justify-end gap-4">
             <button onClick={() => { setIsAnalysisModalOpen(false); setEditingAnalysis(null); }} className="text-sm text-slate-400 font-bold">Cancelar</button>
-            <button onClick={() => handleAddOrEditAnalysis(form)} className="bg-amber-600 hover:bg-amber-500 text-white px-8 py-3 rounded-2xl text-sm font-black shadow-xl transition-all">Salvar Relatório</button>
+            <button onClick={() => handleAddOrEditAnalysis(form, form.disseminationStatus)} className="bg-amber-600 hover:bg-amber-500 text-white px-8 py-3 rounded-2xl text-sm font-black shadow-xl transition-all">Salvar Relatório</button>
           </div>
         </div>
       </div>
@@ -1013,7 +837,7 @@ export default function App() {
   };
 
   const DisseminationModal = () => {
-    const [form, setForm] = useState<Omit<DisseminationLog, 'id'>>(editingDissemination ? { ...editingDissemination } : { pirId: disseminationModalPirId || activeClient?.phases.planning.pirs[0]?.id || '', date: new Date().toISOString().split('T')[0], type: 'Tactical', reportName: '', deliveryChannel: '', notifiedTeam: '', observations: '' });
+    const [form, setForm] = useState<Omit<DisseminationLog, 'id'>>(editingDissemination ? { ...editingDissemination } : { pirId: disseminationModalPirId || activeClient?.phases.planning.pirs[0]?.id || '', date: new Date().toISOString().split('T')[0], type: 'Tactical', status: 'Pending', reportName: '', deliveryChannel: '', notifiedTeam: '', observations: '' });
     const [error, setError] = useState('');
 
     const validateEmail = (email: string) => {
@@ -1044,40 +868,50 @@ export default function App() {
           <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Vincular a PIR</label>
-              <select value={form.pirId} onChange={e => setForm({...form, pirId: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-purple-500">
-                <option value="">Selecione um PIR...</option>
-                {activeClient?.phases.planning.pirs.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+              <select value={form.pirId} onChange={e => setForm({...form, pirId: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500">
+                <option value="" className="bg-slate-950 text-slate-300">Selecione um PIR...</option>
+                {activeClient?.phases.planning.pirs.map(p => <option key={p.id} value={p.id} className="bg-slate-950 text-slate-300">{p.title}</option>)}
               </select>
             </div>
             <div className="grid grid-cols-2 gap-5">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Data</label>
-                <input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-purple-500" />
+                <input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500" />
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nível</label>
-                <select value={form.type} onChange={e => setForm({...form, type: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-purple-500">
-                  <option value="Tactical">Tático</option><option value="Operational">Operacional</option><option value="Strategic">Estratégico</option>
+                <select value={form.type} onChange={e => setForm({...form, type: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500">
+                  <option value="Tactical" className="bg-slate-950 text-slate-300">Tático</option>
+                  <option value="Operational" className="bg-slate-950 text-slate-300">Operacional</option>
+                  <option value="Strategic" className="bg-slate-950 text-slate-300">Estratégico</option>
                 </select>
               </div>
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nome do Report/Arquivo</label>
-              <input type="text" value={form.reportName} onChange={e => setForm({...form, reportName: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-purple-500" placeholder="Ex: IOC_Feed_May.csv" />
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Status Atual</label>
+                <select value={form.status} onChange={e => setForm({...form, status: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500">
+                   <option value="Pending" className="bg-slate-950 text-slate-300">Pendente / Não Enviado</option>
+                   <option value="Disseminated" className="bg-slate-950 text-slate-300">Disseminado / Enviado</option>
+                   <option value="Acknowledged" className="bg-slate-950 text-slate-300">Reconhecido (Ack)</option>
+                </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nome do Relatório (Fonte de Dados)</label>
+              <input type="text" value={form.reportName} onChange={e => setForm({...form, reportName: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500" placeholder="Ex: IOC_Feed_May.csv" />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Canal de Envio (Email)</label>
-                <input type="email" value={form.deliveryChannel} onChange={e => { setForm({...form, deliveryChannel: e.target.value}); setError(''); }} className={`w-full bg-slate-950 border ${error.includes('e-mail') ? 'border-rose-500' : 'border-slate-800'} rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-purple-500`} placeholder="ex: soc@empresa.com" />
+                <input type="email" value={form.deliveryChannel} onChange={e => { setForm({...form, deliveryChannel: e.target.value}); setError(''); }} className={`w-full bg-slate-950 border ${error.includes('e-mail') ? 'border-rose-500' : 'border-slate-800'} rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500`} placeholder="ex: soc@empresa.com" />
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Time Notificado</label>
-                <input type="text" value={form.notifiedTeam} onChange={e => setForm({...form, notifiedTeam: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-purple-500" placeholder="ex: SOC N2, Incident Response" />
+                <input type="text" value={form.notifiedTeam} onChange={e => setForm({...form, notifiedTeam: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500" placeholder="ex: SOC N2, Incident Response" />
               </div>
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Demais Observações</label>
-              <textarea rows={3} value={form.observations} onChange={e => setForm({...form, observations: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-4 text-sm text-white outline-none focus:border-purple-500 resize-none" placeholder="Contexto adicional da disseminação..." />
+              <textarea rows={3} value={form.observations} onChange={e => setForm({...form, observations: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-purple-500 resize-none" placeholder="Contexto adicional da disseminação..." />
             </div>
             {error && <p className="text-xs text-rose-500 font-bold flex items-center gap-2"><AlertCircle className="w-4 h-4" /> {error}</p>}
           </div>
@@ -1090,77 +924,141 @@ export default function App() {
     );
   };
 
-  // --- Main Page Components ---
-  const Dashboard = () => {
-    if (!activeClient) return null;
-    const chartData = activeClient.metrics.map(m => {
-      const diffHours = (d1: string, d2: string) => Math.max(0, (new Date(d1).getTime() - new Date(d2).getTime()) / (1000 * 60 * 60));
-      return { date: new Date(m.discoveryDate).toLocaleDateString(), mttd: diffHours(m.discoveryDate, m.incidentDate || m.discoveryDate), mttdis: diffHours(m.disseminationDate, m.discoveryDate) };
-    });
+  const PirModal = () => {
+    const [form, setForm] = useState<Omit<PIR, 'id' | 'history'>>(editingPir ? { title: editingPir.title, description: editingPir.description, priority: editingPir.priority, status: editingPir.status } : { title: '', description: '', priority: 'Medium', status: 'Draft' });
     return (
-      <div className="space-y-8 animate-in fade-in duration-500 pb-10">
-        <header className="mb-8 flex justify-between items-start">
-          <div>
-            <h1 className="text-4xl font-black text-white mb-2 tracking-tight">Sentinel Dashboard</h1>
-            <p className="text-slate-400 font-medium">Insights operacionais e eficácia do ciclo de inteligência.</p>
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => { setIsPirModalOpen(false); setEditingPir(null); }} />
+        <div className="relative bg-slate-900 border border-slate-800 w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
+          <div className="px-8 py-6 border-b border-slate-800 flex justify-between items-center bg-slate-800/20">
+            <h3 className="font-bold text-xl flex items-center gap-3"><TargetIcon className="w-6 h-6 text-blue-500" /> {editingPir ? 'Editar PIR' : 'Novo Requisito (PIR)'}</h3>
+            <button onClick={() => { setIsPirModalOpen(false); setEditingPir(null); }}><X className="w-6 h-6 text-slate-500" /></button>
           </div>
-          {activeClient && (
-            <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-[2rem] flex gap-8 items-center shadow-2xl backdrop-blur-xl">
-               <div className="flex flex-col">
-                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Setor Alvo</span>
-                  <span className="text-sm font-bold text-slate-200">{activeClient.sector}</span>
+          <div className="p-8 space-y-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Título do Requisito</label>
+              <input type="text" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-blue-500" placeholder="Ex: Ameaças ao sistema SWIFT" />
+            </div>
+            <div className="grid grid-cols-2 gap-5">
+               <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Prioridade</label>
+                  <select value={form.priority} onChange={e => setForm({...form, priority: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-blue-500">
+                    <option value="High">Alta</option><option value="Medium">Média</option><option value="Low">Baixa</option>
+                  </select>
                </div>
-               <div className="w-px h-10 bg-slate-800" />
-               <div className="flex flex-col">
-                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Ponto de Contato</span>
-                  <div className="flex items-center gap-2">
-                    <User className="w-3.5 h-3.5 text-indigo-400" />
-                    <span className="text-sm font-bold text-slate-200">{activeClient.stakeholderName || 'N/A'}</span>
-                  </div>
+               <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Status</label>
+                  <select value={form.status} onChange={e => setForm({...form, status: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-blue-500">
+                    <option value="Active">Ativo</option><option value="Draft">Rascunho</option><option value="Archived">Arquivado</option>
+                  </select>
                </div>
             </div>
-          )}
-        </header>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard title="MTTD Médio" value={`${performanceStats?.mttd || '0.0'}h`} color="rose" description="Tempo médio de detecção" />
-          <StatCard title="MTTDis Médio" value={`${performanceStats?.mttdis || '0.0'}h`} color="indigo" description="Tempo para disseminação" />
-          <StatCard title="Precisão de Inteligência" value={`${performanceStats?.accuracy || '0'}%`} color="emerald" description="Ameaças mapeadas em PIRs" />
-          <StatCard title="Total de Casos" value={performanceStats?.total || 0} color="amber" description="Incidentes e potenciais" />
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-slate-900/50 border border-slate-800 p-8 rounded-[2.5rem] h-[400px] shadow-2xl">
-            <h3 className="text-xs font-black text-slate-500 uppercase mb-8 flex items-center gap-3 tracking-widest"><TrendingUp className="w-4 h-4 text-emerald-400" /> Histórico Temporal de Resposta</h3>
-            <ResponsiveContainer width="100%" height="85%">
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="colorMttd" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3}/><stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/></linearGradient>
-                  <linearGradient id="colorMttdis" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/><stop offset="95%" stopColor="#6366f1" stopOpacity={0}/></linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                <XAxis dataKey="date" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', color: '#fff' }} />
-                <Area type="monotone" dataKey="mttd" stroke="#f43f5e" strokeWidth={3} fillOpacity={1} fill="url(#colorMttd)" name="MTTD" />
-                <Area type="monotone" dataKey="mttdis" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorMttdis)" name="MTTDis" />
-                <Legend verticalAlign="top" align="right" height={36}/>
-              </AreaChart>
-            </ResponsiveContainer>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Descrição</label>
+              <textarea rows={4} value={form.description} onChange={e => setForm({...form, description: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-blue-500 resize-none" placeholder="Descreva o que precisamos monitorar..." />
+            </div>
           </div>
-          
-          <div className="bg-slate-900/50 border border-slate-800 p-8 rounded-[2.5rem] flex flex-col justify-between shadow-2xl relative group cursor-pointer" onClick={handleAiInsight}>
-             <div className="absolute top-0 right-0 p-6 opacity-20 group-hover:opacity-100 transition-opacity">
-                <Sparkles className="w-12 h-12 text-indigo-500 animate-pulse" />
-             </div>
-             <div>
-                <h3 className="text-xs font-black text-slate-500 uppercase mb-2 tracking-widest">Eficácia Preventiva</h3>
-                <p className="text-5xl font-black text-white">{performanceStats?.prevention}%</p>
-                <p className="text-xs text-slate-500 mt-4 font-medium leading-relaxed italic">Clique para o Analista de IA correlacionar as métricas de prevenção com a matriz de coleta atual.</p>
-             </div>
-             <button className="w-full bg-indigo-600 hover:bg-indigo-500 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-indigo-900/20 active:scale-95">
-                Correlacionar com IA
-             </button>
+          <div className="px-8 py-6 bg-slate-800/20 border-t border-slate-800 flex justify-end gap-4">
+            <button onClick={() => { setIsPirModalOpen(false); setEditingPir(null); }} className="text-sm text-slate-400 font-bold">Cancelar</button>
+            <button onClick={() => handleAddOrEditPir(form)} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-2xl text-sm font-black shadow-xl transition-all">Salvar PIR</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const SourceModal = () => {
+    const [form, setForm] = useState<Omit<IntelligenceSource, 'id'>>(editingSource ? { ...editingSource } : { pirId: sourceModalPirId || activeClient?.phases.planning.pirs[0]?.id || '', name: '', description: '', type: 'OSINT', credibility: 'B', reliability: 'B', integrationDate: new Date().toISOString().split('T')[0] });
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => { setIsSourceModalOpen(false); setEditingSource(null); }} />
+        <div className="relative bg-slate-900 border border-slate-800 w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
+          <div className="px-8 py-6 border-b border-slate-800 flex justify-between items-center bg-slate-800/20">
+            <h3 className="font-bold text-xl flex items-center gap-3"><Search className="w-6 h-6 text-emerald-500" /> {editingSource ? 'Editar Fonte' : 'Nova Fonte de Coleta'}</h3>
+            <button onClick={() => { setIsSourceModalOpen(false); setEditingSource(null); }}><X className="w-6 h-6 text-slate-500" /></button>
+          </div>
+          <div className="p-8 space-y-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Vincular a PIR</label>
+              <select value={form.pirId} onChange={e => setForm({...form, pirId: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-emerald-500">
+                {activeClient?.phases.planning.pirs.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nome da Fonte</label>
+              <input type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-emerald-500" placeholder="Ex: Recorded Future" />
+            </div>
+             <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Descrição / Detalhes</label>
+              <textarea rows={3} value={form.description || ''} onChange={e => setForm({...form, description: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-emerald-500 resize-none" placeholder="Contexto sobre esta fonte de inteligência..." />
+            </div>
+            <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Tipo</label>
+                <select value={form.type} onChange={e => setForm({...form, type: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-emerald-500">
+                  <option value="OSINT">OSINT</option><option value="FeedComercial">Feed Comercial</option><option value="FeedAberto">Feed Aberto</option><option value="Internal">Interna</option><option value="DarkWeb">Dark Web</option>
+                </select>
+            </div>
+            <div className="grid grid-cols-2 gap-5">
+               <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Confiabilidade (Fonte)</label>
+                  <select value={form.reliability} onChange={e => setForm({...form, reliability: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-emerald-500">
+                    {SCALE_ORDER.map(k => <option key={k} value={k}>{k} - {SCALE_LABELS.reliability[k].split(' ')[0]}</option>)}
+                  </select>
+               </div>
+               <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Credibilidade (Info)</label>
+                  <select value={form.credibility} onChange={e => setForm({...form, credibility: e.target.value as any})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-emerald-500">
+                    {SCALE_ORDER.map(k => <option key={k} value={k}>{k} - {SCALE_LABELS.credibility[k].split(' ')[0]}</option>)}
+                  </select>
+               </div>
+            </div>
+          </div>
+          <div className="px-8 py-6 bg-slate-800/20 border-t border-slate-800 flex justify-end gap-4">
+            <button onClick={() => { setIsSourceModalOpen(false); setEditingSource(null); }} className="text-sm text-slate-400 font-bold">Cancelar</button>
+            <button onClick={() => handleAddOrEditSource(form)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-3 rounded-2xl text-sm font-black shadow-xl transition-all">Salvar Fonte</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const OrgModal = () => {
+    const [form, setForm] = useState<Partial<ClientData>>(editingOrg ? { ...editingOrg } : { name: '', sector: '', description: '', stakeholderName: '', stakeholderEmail: '' });
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => { setIsOrgModalOpen(false); setEditingOrg(null); }} />
+        <div className="relative bg-slate-900 border border-slate-800 w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
+          <div className="px-8 py-6 border-b border-slate-800 flex justify-between items-center bg-slate-800/20">
+            <h3 className="font-bold text-xl flex items-center gap-3"><Users className="w-6 h-6 text-indigo-500" /> {editingOrg ? 'Editar Organização' : 'Nova Organização'}</h3>
+            <button onClick={() => { setIsOrgModalOpen(false); setEditingOrg(null); }}><X className="w-6 h-6 text-slate-500" /></button>
+          </div>
+          <div className="p-8 space-y-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nome da Organização</label>
+              <input type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-indigo-500" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Setor de Atuação</label>
+              <input type="text" value={form.sector} onChange={e => setForm({...form, sector: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-indigo-500" />
+            </div>
+            <div className="grid grid-cols-2 gap-5">
+               <div className="space-y-2">
+                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Stakeholder Principal</label>
+                 <input type="text" value={form.stakeholderName} onChange={e => setForm({...form, stakeholderName: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-indigo-500" />
+               </div>
+               <div className="space-y-2">
+                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Email</label>
+                 <input type="email" value={form.stakeholderEmail} onChange={e => setForm({...form, stakeholderEmail: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-indigo-500" />
+               </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Missão / Descrição</label>
+              <textarea rows={3} value={form.description} onChange={e => setForm({...form, description: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 px-4 text-sm text-white outline-none focus:border-indigo-500 resize-none" />
+            </div>
+          </div>
+          <div className="px-8 py-6 bg-slate-800/20 border-t border-slate-800 flex justify-end gap-4">
+            <button onClick={() => { setIsOrgModalOpen(false); setEditingOrg(null); }} className="text-sm text-slate-400 font-bold">Cancelar</button>
+            <button onClick={() => handleAddOrEditOrg(form)} className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-2xl text-sm font-black shadow-xl transition-all">Salvar Org</button>
           </div>
         </div>
       </div>
@@ -1223,7 +1121,7 @@ export default function App() {
                     <div className="space-y-4">
                       {pirSources.map(s => (
                         <div key={s.id} className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl hover:border-emerald-500/30 transition-all group">
-                           <div className="flex justify-between items-center">
+                           <div className="flex justify-between items-center mb-2">
                               <div className="flex items-center gap-4">
                                  <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg"><Globe className="w-4 h-4" /></div>
                                  <div>
@@ -1240,6 +1138,7 @@ export default function App() {
                                 <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteSource(s.id); }} className="p-2 hover:bg-rose-500/10 rounded-lg text-slate-500 hover:text-rose-400"><Trash2 className="w-4 h-4" /></button>
                               </div>
                            </div>
+                           {s.description && <p className="text-xs text-slate-500 leading-relaxed pl-14 pr-4">{s.description}</p>}
                         </div>
                       ))}
                       {pirSources.length === 0 && (
@@ -1312,16 +1211,26 @@ export default function App() {
                            <div className="flex justify-between items-start mb-4">
                               <div className="flex items-center gap-4">
                                  <div className="p-2 bg-purple-500/10 text-purple-400 rounded-lg"><Share2 className="w-4 h-4" /></div>
-                                 <div>
-                                    <h4 className="font-bold text-slate-100">{l.reportName}</h4>
+                                 <div className="flex-1">
+                                    <div className="flex justify-between items-center mb-1">
+                                      <h4 className="font-bold text-slate-100">{l.reportName}</h4>
+                                      <span className={`text-[10px] font-black px-2 py-1 rounded border uppercase ${
+                                          l.status === 'Disseminated' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                                          l.status === 'Acknowledged' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                          'bg-slate-800 text-slate-400 border-slate-700'
+                                      }`}>
+                                        {l.status === 'Pending' ? 'Pendente' : l.status === 'Disseminated' ? 'Disseminado' : 'Reconhecido'}
+                                      </span>
+                                    </div>
                                     <span className="text-[10px] font-bold text-slate-500 uppercase">{l.type} • {l.date}</span>
                                     <div className="flex flex-wrap gap-x-3 mt-1">
                                        {l.deliveryChannel && <span className="text-[10px] text-indigo-400 font-bold bg-indigo-500/10 px-1.5 rounded uppercase">{l.deliveryChannel}</span>}
                                        {l.notifiedTeam && <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-1.5 rounded uppercase">{l.notifiedTeam}</span>}
+                                       {l.reportId && <span className="text-[9px] text-amber-500 font-black border border-amber-500/30 px-1.5 rounded uppercase">Vínculo: Análise</span>}
                                     </div>
                                  </div>
                               </div>
-                              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity ml-4">
                                 <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditingDissemination(l); setIsDisseminationModalOpen(true); }} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400"><Edit2 className="w-4 h-4" /></button>
                                 <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteDissemination(l.id); }} className="p-2 hover:bg-rose-500/10 rounded-lg text-slate-500 hover:text-rose-400"><Trash2 className="w-4 h-4" /></button>
                               </div>
@@ -1395,208 +1304,170 @@ export default function App() {
     );
   };
 
-  const NavItem = ({ active, onClick, icon, label, color = 'indigo' }: any) => {
-    const variant = COLOR_VARIANTS[color] || COLOR_VARIANTS.indigo;
-    return (<button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-4 rounded-2xl transition-all group ${active ? `${variant.bg} ${variant.text} border ${variant.border} shadow-lg shadow-${color}-500/10` : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'}`}><div className={`shrink-0 ${active ? variant.text : 'text-slate-500 group-hover:text-slate-300'}`}>{icon}</div><span className="text-sm font-bold tracking-tight">{label}</span></button>);
-  }
-
-  const StatCard = ({ title, value, color, description }: any) => {
-    const variant = COLOR_VARIANTS[color] || COLOR_VARIANTS.indigo;
-    return (<div className="bg-slate-900/50 border border-slate-800 p-6 rounded-3xl hover:border-slate-600 transition-all shadow-xl group relative overflow-hidden"><div className={`absolute top-0 right-0 w-24 h-24 ${variant.bg} rounded-full -mr-12 -mt-12 blur-3xl opacity-50`}></div><p className="text-[10px] font-black text-slate-500 uppercase mb-3 tracking-widest relative z-10">{title}</p><div className="flex items-baseline gap-2 relative z-10"><span className="text-4xl font-bold text-white group-hover:scale-105 transition-transform inline-block origin-left">{value}</span></div>{description && <p className="text-[11px] text-slate-500 mt-2 font-medium relative z-10">{description}</p>}</div>);
-  }
-
-  const CasesManager = () => {
+  const Dashboard = () => {
     if (!activeClient) return null;
-    const typeData = [
-      { name: 'Incidente', value: performanceStats?.incidents || 0, color: '#f43f5e' },
-      { name: 'Potencial', value: performanceStats?.potentials || 0, color: '#f59e0b' }
-    ];
-    const accuracyData = [
-      { name: 'Antecipado', value: performanceStats?.mapped || 0, color: '#10b981' },
-      { name: 'Não Mapeado', value: performanceStats?.unmapped || 0, color: '#6366f1' }
-    ];
-    const resultData = [
-      { name: 'Mitigado', value: performanceStats?.mitigated || 0, color: '#10b981' },
-      { name: 'Consumado', value: performanceStats?.consummated || 0, color: '#f43f5e' }
+
+    const stats = [
+      { label: 'PIRs Ativos', value: activeClient.phases.planning.pirs.filter(p => p.status === 'Active').length, total: activeClient.phases.planning.pirs.length, color: 'blue', icon: TargetIcon },
+      { label: 'Fontes Monitoradas', value: activeClient.phases.collection.sources.length, total: null, color: 'emerald', icon: Search },
+      { label: 'Relatórios Produzidos', value: activeClient.phases.analysis.reports.length, total: null, color: 'amber', icon: BarChart3 },
+      { label: 'Alertas Disseminados', value: activeClient.phases.dissemination.logs.filter(l => l.status === 'Disseminated' || l.status === 'Acknowledged').length, total: activeClient.phases.dissemination.logs.length, color: 'purple', icon: Share2 },
     ];
 
-    const chartTotal = (data: any[]) => data.reduce((acc, curr) => acc + curr.value, 0);
+    const alertsData = activeClient.phases.dissemination.logs.reduce((acc: any[], log) => {
+       const date = log.date.substring(5); // MM-DD
+       const existing = acc.find(a => a.name === date);
+       if (existing) existing.value++;
+       else acc.push({ name: date, value: 1 });
+       return acc;
+    }, []).sort((a: any, b: any) => a.name.localeCompare(b.name));
 
-    const commonTooltipProps = (data: any[]) => ({
-      contentStyle: { 
-        backgroundColor: '#ffffff', 
-        border: 'none', 
-        borderRadius: '12px', 
-        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-        padding: '12px'
-      },
-      itemStyle: {
-        color: '#0f172a',
-        fontSize: '12px',
-        fontWeight: 'bold',
-        textTransform: 'uppercase' as const
-      },
-      formatter: (value: number, name: string) => {
-        const total = chartTotal(data);
-        const percent = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-        return [`${percent}% (${value})`, name];
-      }
-    });
+    const responseTimeData = activeClient.metrics.map(m => {
+        const incidentTime = m.incidentDate ? new Date(m.incidentDate).getTime() : new Date(m.discoveryDate).getTime();
+        const discoveryTime = new Date(m.discoveryDate).getTime();
+        const disseminationTime = new Date(m.disseminationDate).getTime();
+
+        const mttd = Math.max(0, (discoveryTime - incidentTime) / (1000 * 60 * 60));
+        const mttdis = Math.max(0, (disseminationTime - discoveryTime) / (1000 * 60 * 60));
+
+        return {
+            name: `CAS-${m.id.substring(0,4)}`,
+            mttd: parseFloat(mttd.toFixed(1)),
+            mttdis: parseFloat(mttdis.toFixed(1))
+        };
+    }).slice(-10); // Show last 10 cases
 
     return (
-      <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-        <header className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-white mb-1">Gestão de Casos</h1>
-            <p className="text-slate-400">Visão técnica detalhada e análise de eficácia preventiva.</p>
-          </div>
-          <button onClick={() => { setEditingMetric(null); setIsMetricModalOpen(true); }} className="flex items-center gap-2 bg-rose-600 hover:bg-rose-500 px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-rose-900/20 active:scale-95">
-            <Plus className="w-5 h-5" /> Registrar Caso
-          </button>
-        </header>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl flex flex-col items-center">
-            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6 flex items-center gap-2"><Zap className="w-3.5 h-3.5 text-rose-500" /> Distribuição por Tipo</h4>
-            <div className="h-40 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={typeData} dataKey="value" innerRadius={45} outerRadius={60} stroke="none" paddingAngle={5}>
-                    {typeData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
-                  </Pie>
-                  <Tooltip {...commonTooltipProps(typeData)} />
-                  <Legend verticalAlign="bottom" align="center" iconType="circle" />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl flex flex-col items-center">
-            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6 flex items-center gap-2"><TargetIcon className="w-3.5 h-3.5 text-indigo-500" /> Precisão (Mapeado vs Não)</h4>
-            <div className="h-40 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={accuracyData} dataKey="value" innerRadius={45} outerRadius={60} stroke="none" paddingAngle={5}>
-                    {accuracyData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
-                  </Pie>
-                  <Tooltip {...commonTooltipProps(accuracyData)} />
-                  <Legend verticalAlign="bottom" align="center" iconType="circle" />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl flex flex-col items-center">
-            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6 flex items-center gap-2">
-              <img src={LOGO_URL} alt="ShieldSec Icon" className="w-3.5 h-3.5 object-contain grayscale brightness-125" /> Resultado Operacional
-            </h4>
-            <div className="h-40 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={resultData} dataKey="value" innerRadius={45} outerRadius={60} stroke="none" paddingAngle={5}>
-                    {resultData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
-                  </Pie>
-                  <Tooltip {...commonTooltipProps(resultData)} />
-                  <Legend verticalAlign="bottom" align="center" iconType="circle" />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+      <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
+        <div className="flex justify-between items-end">
+           <div>
+              <h1 className="text-4xl font-black text-white tracking-tight mb-2">Visão Geral</h1>
+              <p className="text-slate-400 font-medium">Monitoramento em tempo real do programa de inteligência.</p>
+           </div>
+           <button 
+              onClick={() => { setSourceModalPirId(null); setEditingSource(null); setIsSourceModalOpen(true); }}
+              className="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 border border-emerald-500/30 hover:border-emerald-500 shadow-lg"
+           >
+              <PlusCircle className="w-4 h-4" /> Nova Fonte
+           </button>
         </div>
 
-        <div className="bg-slate-900/50 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="text-slate-500 border-b border-slate-800 uppercase tracking-widest text-[10px] font-black bg-slate-900/80 backdrop-blur">
-                  <th className="py-5 px-6">Identificação & PIR</th>
-                  <th className="py-5 px-6">Tipo & Temporalidade</th>
-                  <th className="py-5 px-6">Impacto & Status</th>
-                  <th className="py-5 px-6">Métricas (H)</th>
-                  <th className="py-5 px-6">Resultado</th>
-                  <th className="py-5 px-6 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/50">
-                {activeClient.metrics.map(m => {
-                  const pir = activeClient.phases.planning.pirs.find(p => p.id === m.pirId);
-                  const mttd = m.incidentDate ? (new Date(m.discoveryDate).getTime() - new Date(m.incidentDate).getTime()) / 3600000 : 0;
-                  const mttdis = (new Date(m.disseminationDate).getTime() - new Date(m.discoveryDate).getTime()) / 3600000;
-                  return (
-                    <tr key={m.id} className="hover:bg-slate-800/40 transition-all group">
-                      <td className="py-5 px-6">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-slate-100 font-bold leading-tight">{pir?.title || 'PIR Não Encontrado'}</span>
-                          <span className="text-[10px] font-mono text-slate-500 uppercase bg-slate-950 w-fit px-1.5 rounded border border-slate-800">CAS-{m.id.substring(0,6)}</span>
-                        </div>
-                      </td>
-                      <td className="py-5 px-6">
-                        <div className="flex flex-col gap-1.5">
-                          {m.hasIncident ? (
-                            <span className="flex items-center gap-1.5 text-rose-400 font-bold text-[11px]"><AlertTriangle className="w-3 h-3" /> INCIDENTE REAL</span>
-                          ) : (
-                            <span className="flex items-center gap-1.5 text-amber-500 font-bold text-[11px]"><Zap className="w-3 h-3" /> POTENCIAL/DISCOVERY</span>
-                          )}
-                          <div className="flex items-center gap-2 text-[10px] text-slate-500 font-medium">
-                            <Calendar className="w-3 h-3" /> {new Date(m.discoveryDate).toLocaleDateString()}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-5 px-6">
-                        <div className="flex flex-col gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className={`text-[10px] font-black px-2 py-0.5 rounded border uppercase ${
-                              m.impactScale === 'Critical' ? 'bg-rose-500/20 text-rose-500 border-rose-500/20' :
-                              m.impactScale === 'High' ? 'bg-orange-500/20 text-orange-500 border-orange-500/20' :
-                              'bg-slate-700/50 text-slate-400 border-slate-600/50'
-                            }`}>{m.impactScale}</span>
-                            {m.wasPreviouslyReported ? (
-                              <span className="text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 uppercase flex items-center gap-1">
-                                <CheckCircle className="w-2.5 h-2.5" /> Antecipado
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-black text-slate-500 bg-slate-500/10 px-2 py-0.5 rounded border border-slate-500/20 uppercase">Não Mapeado</span>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-5 px-6">
-                        <div className="flex flex-col gap-1">
-                           <div className="flex items-center justify-between gap-4 text-[10px]">
-                              <span className="text-slate-500 uppercase font-black tracking-tighter">MTTD</span>
-                              <span className={`font-mono font-bold ${mttd > 24 ? 'text-rose-400' : 'text-emerald-400'}`}>{mttd.toFixed(1)}h</span>
-                           </div>
-                           <div className="flex items-center justify-between gap-4 text-[10px]">
-                              <span className="text-slate-500 uppercase font-black tracking-tighter">MTTDis</span>
-                              <span className="text-indigo-400 font-mono font-bold">{mttdis.toFixed(1)}h</span>
-                           </div>
-                        </div>
-                      </td>
-                      <td className="py-5 px-6">
-                        {m.incidentPrevented ? (
-                          <div className="flex items-center gap-2 text-emerald-400 font-bold bg-emerald-400/5 border border-emerald-400/10 px-3 py-1.5 rounded-xl w-fit">
-                            <img src={LOGO_URL} alt="Mitigated" className="w-4 h-4 object-contain grayscale brightness-200" /> Mitigado
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2 text-rose-500 font-bold bg-rose-500/5 border border-rose-500/10 px-3 py-1.5 rounded-xl w-fit">
-                            <Activity className="w-4 h-4" /> Consumado
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-5 px-6 text-right">
-                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => { setEditingMetric(m); setIsMetricModalOpen(true); }} className="p-2.5 hover:bg-slate-700 rounded-xl text-slate-400 hover:text-white transition-all">
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button onClick={() => handleDeleteMetric(m.id)} className="p-2.5 hover:bg-rose-500/10 rounded-xl text-slate-500 hover:text-rose-400 transition-all">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+           {stats.map((s, i) => (
+             <div key={i} className="bg-slate-900/50 border border-slate-800 p-6 rounded-[2rem] hover:border-slate-700 transition-all group relative overflow-hidden">
+                <div className={`absolute top-0 right-0 w-32 h-32 bg-${s.color}-500/10 rounded-full -mr-10 -mt-10 blur-3xl transition-all group-hover:bg-${s.color}-500/20`}></div>
+                <div className="flex justify-between items-start mb-4 relative z-10">
+                   <div className={`p-3 bg-${s.color}-500/10 text-${s.color}-400 rounded-2xl`}>
+                      <s.icon className="w-6 h-6" />
+                   </div>
+                   {s.total !== null && <span className="text-xs font-bold text-slate-500 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800">{s.total} Total</span>}
+                </div>
+                <div className="relative z-10">
+                   <h3 className="text-4xl font-bold text-white mb-1 group-hover:scale-105 transition-transform origin-left">{s.value}</h3>
+                   <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{s.label}</p>
+                </div>
+             </div>
+           ))}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+           <div className="lg:col-span-2 bg-slate-900/50 border border-slate-800 p-8 rounded-[2.5rem] shadow-xl">
+              <h3 className="text-sm font-black text-slate-300 uppercase tracking-widest mb-8 flex items-center gap-2">
+                 <Activity className="w-4 h-4 text-indigo-500" /> Volume de Alertas & Disseminações
+              </h3>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={alertsData}>
+                    <defs>
+                      <linearGradient id="colorAlerts" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                    <XAxis dataKey="name" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px' }}
+                      itemStyle={{ color: '#e2e8f0', fontSize: '12px', fontWeight: 'bold' }}
+                    />
+                    <Area type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorAlerts)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+           </div>
+
+           <div className="bg-slate-900/50 border border-slate-800 p-8 rounded-[2.5rem] shadow-xl">
+               <h3 className="text-sm font-black text-slate-300 uppercase tracking-widest mb-6 flex items-center gap-2">
+                 <Zap className="w-4 h-4 text-amber-500" /> Métricas Rápidas
+               </h3>
+               <div className="space-y-6">
+                  <div className="bg-slate-950/50 p-5 rounded-3xl border border-slate-800">
+                     <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-2">Eficácia de Prevenção</p>
+                     <div className="flex items-end gap-2 mb-2">
+                        <span className="text-3xl font-bold text-emerald-400">{performanceStats?.prevention || 0}%</span>
+                        <span className="text-xs text-slate-500 mb-1.5">dos casos mitigados</span>
+                     </div>
+                     <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                        <div className="bg-emerald-500 h-full rounded-full transition-all duration-1000" style={{ width: `${performanceStats?.prevention || 0}%` }}></div>
+                     </div>
+                  </div>
+                  <div className="bg-slate-950/50 p-5 rounded-3xl border border-slate-800">
+                     <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-2">Precisão de Mapeamento</p>
+                     <div className="flex items-end gap-2 mb-2">
+                        <span className="text-3xl font-bold text-indigo-400">{performanceStats?.accuracy || 0}%</span>
+                        <span className="text-xs text-slate-500 mb-1.5">dos casos antecipados</span>
+                     </div>
+                     <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                        <div className="bg-indigo-500 h-full rounded-full transition-all duration-1000" style={{ width: `${performanceStats?.accuracy || 0}%` }}></div>
+                     </div>
+                  </div>
+               </div>
+           </div>
+        </div>
+
+        {/* Novo Histograma de Resposta (Curva) */}
+        <div className="bg-slate-900/50 border border-slate-800 p-8 rounded-[2.5rem] shadow-xl">
+            <div className="flex justify-between items-center mb-8">
+                <h3 className="text-sm font-black text-slate-300 uppercase tracking-widest flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-blue-500" /> Curva de Tempos de Resposta (MTTD vs MTTDis)
+                </h3>
+                <div className="flex gap-4 text-[10px] font-black uppercase tracking-widest">
+                    <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-rose-500 rounded-full"></div>
+                        <span className="text-slate-400">MTTD (Detecção)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-indigo-500 rounded-full"></div>
+                        <span className="text-slate-400">MTTDis (Disseminação)</span>
+                    </div>
+                </div>
+            </div>
+            <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={responseTimeData}>
+                        <defs>
+                          <linearGradient id="colorMttd" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="colorMttdis" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                        <XAxis dataKey="name" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+                        <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} unit="h" />
+                        <Tooltip 
+                            contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px' }}
+                            itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
+                        />
+                        <Area type="monotone" dataKey="mttd" stroke="#f43f5e" strokeWidth={2} fillOpacity={1} fill="url(#colorMttd)" name="MTTD (Horas)" />
+                        <Area type="monotone" dataKey="mttdis" stroke="#6366f1" strokeWidth={2} fillOpacity={1} fill="url(#colorMttdis)" name="MTTDis (Horas)" />
+                    </AreaChart>
+                </ResponsiveContainer>
+            </div>
         </div>
       </div>
     );
@@ -1607,177 +1478,187 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-slate-950 text-slate-100 font-sans">
-      {isMetricModalOpen && <MetricEntryModal />}
-      {isDisseminationModalOpen && <DisseminationModal />}
-      {isPirModalOpen && <PirModal />}
-      {isSourceModalOpen && <SourceModal />}
-      {isAnalysisModalOpen && <AnalysisModal />}
-      {isOrgModalOpen && <OrgModal />}
-      <ConfirmationModal />
-
-      <aside className={`bg-slate-900/60 border-r border-slate-800/50 transition-all duration-500 flex flex-col z-20 backdrop-blur-2xl ${isSidebarOpen ? 'w-80' : 'w-0 -translate-x-full overflow-hidden'}`}>
-        <div className="p-10 flex items-center gap-4 border-b border-slate-800/30">
-          <div className="bg-white/5 border border-white/10 p-2.5 rounded-[1.25rem] shadow-2xl rotate-3 group-hover:rotate-0 transition-transform">
-            <img src={LOGO_URL} alt="Sentinel Logo" className="w-8 h-8 object-contain" />
-          </div>
-          <span className="font-black text-2xl tracking-tighter text-white uppercase italic">Sentinel</span>
+    <div className="flex min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-indigo-500/30">
+      {/* Sidebar */}
+      <aside className={`fixed top-0 left-0 h-full bg-slate-950/80 backdrop-blur-xl border-r border-slate-800 transition-all duration-300 z-50 ${isSidebarOpen ? 'w-80' : 'w-24'}`}>
+        <div className="p-6 flex items-center gap-4 mb-8">
+           <div className="relative">
+              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                 <Zap className="w-5 h-5 text-white" />
+              </div>
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-slate-950"></div>
+           </div>
+           {isSidebarOpen && (
+             <div>
+               <h2 className="font-black text-lg tracking-tighter text-white leading-none">SENTINEL</h2>
+               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Enterprise CTI</p>
+             </div>
+           )}
         </div>
-        
-        <div className="px-6 py-10 flex-1 space-y-10 overflow-y-auto custom-scrollbar">
-          <div>
-            <label className="text-[9px] font-black text-slate-500 uppercase px-4 mb-6 block tracking-[0.2em]">Organizações</label>
-            <div className="space-y-2">
-              {clients.map(c => (
-                <div key={c.id} className="group/org relative">
-                  <button onClick={() => setActiveClientId(c.id)} className={`w-full flex items-center gap-3 px-5 py-4 rounded-[1.25rem] text-sm font-bold transition-all truncate pr-20 ${activeClientId === c.id ? 'bg-indigo-600 text-white shadow-2xl shadow-indigo-900/40' : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-300'}`}>
-                    <div className={`w-2 h-2 rounded-full shrink-0 ${activeClientId === c.id ? 'bg-white shadow-[0_0_10px_white]' : 'bg-slate-700'}`}></div>
-                    <span className="truncate">{c.name}</span>
-                  </button>
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex gap-1 opacity-0 group-hover/org:opacity-100 transition-all">
-                    <button onClick={(e) => { e.stopPropagation(); setEditingOrg(c); setIsOrgModalOpen(true); }} className="p-2 hover:bg-slate-700 rounded-xl text-slate-300 transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
-                    <button onClick={(e) => { e.stopPropagation(); handleDeleteOrg(c.id); }} className="p-2 hover:bg-rose-500/20 rounded-xl text-slate-400 hover:text-rose-400 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
-                  </div>
+
+        <nav className="px-4 space-y-2">
+           <button 
+             onClick={() => setActivePhase('dashboard')}
+             className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl transition-all group ${activePhase === 'dashboard' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-900/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}
+           >
+              <LayoutDashboard className={`w-5 h-5 ${activePhase === 'dashboard' ? 'text-white' : 'text-slate-500 group-hover:text-white'}`} />
+              {isSidebarOpen && <span className="font-bold text-sm">Dashboard</span>}
+           </button>
+           
+           <div className="pt-6 pb-2 px-4">
+              {isSidebarOpen && <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Ciclo de Vida</p>}
+           </div>
+
+           {(Object.keys(PHASE_CONFIG) as CTIPhase[]).map(phase => (
+             <button 
+               key={phase}
+               onClick={() => setActivePhase(phase)}
+               className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl transition-all group relative overflow-hidden ${activePhase === phase ? `bg-${PHASE_CONFIG[phase].color}-500/10 text-${PHASE_CONFIG[phase].color}-400 border border-${PHASE_CONFIG[phase].color}-500/20` : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}
+             >
+                <div className={`${activePhase === phase ? '' : 'text-slate-500 group-hover:text-white'}`}>
+                   {PHASE_CONFIG[phase].icon}
                 </div>
-              ))}
-              <button onClick={() => { setEditingOrg(null); setIsOrgModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-[1.25rem] text-xs text-slate-500 font-black border-2 border-dashed border-slate-800 hover:border-slate-700 hover:text-slate-400 transition-all mt-4 uppercase tracking-widest">
-                <Plus className="w-4 h-4" /> Novo Cliente
-              </button>
-            </div>
-          </div>
-          <nav className="space-y-10">
-            <div>
-              <label className="text-[9px] font-black text-slate-500 uppercase px-4 mb-6 block tracking-[0.2em]">Principal</label>
-              <div className="space-y-2">
-                <NavItem active={activePhase === 'dashboard'} onClick={() => setActivePhase('dashboard')} icon={<LayoutDashboard className="w-5 h-5" />} label="Visão Sentinel" />
-                <NavItem active={activePhase === 'cases'} onClick={() => setActivePhase('cases')} icon={<Activity className="w-5 h-5" />} label="Gestão de Casos" color="rose" />
-              </div>
-            </div>
-            <div>
-              <label className="text-[9px] font-black text-slate-500 uppercase px-4 mb-6 block tracking-[0.2em]">Ciclo de Inteligência</label>
-              <div className="space-y-2">
-                {(Object.keys(PHASE_CONFIG) as CTIPhase[]).map(p => (
-                  <NavItem key={p} active={activePhase === p} onClick={() => setActivePhase(p)} icon={PHASE_CONFIG[p].icon} label={p === 'collection' ? PHASE_CONFIG[p].title : PHASE_CONFIG[p].title.split(' ')[0]} color={PHASE_CONFIG[p].color} />
-                ))}
-              </div>
-            </div>
-          </nav>
-        </div>
+                {isSidebarOpen && <span className="font-bold text-sm">{PHASE_CONFIG[phase].title.split(' ')[0]}</span>}
+                {activePhase === phase && <div className={`absolute left-0 top-0 bottom-0 w-1 bg-${PHASE_CONFIG[phase].color}-500`}></div>}
+             </button>
+           ))}
+        </nav>
 
-        <div className="p-6 border-t border-slate-800/30">
-          <button 
-            onClick={() => setIsAuthenticated(false)}
-            className="w-full flex items-center gap-3 px-5 py-4 rounded-[1.25rem] text-sm font-bold text-slate-500 hover:bg-rose-500/10 hover:text-rose-500 transition-all group"
-          >
-            <LogOut className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-            Sair do Terminal
-          </button>
+        <div className="absolute bottom-0 left-0 w-full p-6 border-t border-slate-800 bg-slate-950/50">
+           <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 font-bold border border-slate-700">JS</div>
+              {isSidebarOpen && (
+                 <div className="flex-1">
+                    <p className="text-xs font-bold text-white">John Smith</p>
+                    <p className="text-[10px] text-slate-500 font-medium">Analista Senior</p>
+                 </div>
+              )}
+              {isSidebarOpen && <button onClick={() => setIsAuthenticated(false)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-rose-500"><LogOut className="w-4 h-4" /></button>}
+           </div>
         </div>
       </aside>
-      
-      <main className="flex-1 flex flex-col min-w-0 bg-slate-950 relative">
-        <header className="h-24 border-b border-slate-800/30 px-12 flex items-center justify-between bg-slate-950/60 backdrop-blur-3xl sticky top-0 z-10">
-          <div className="flex items-center gap-8">
-            <button onClick={toggleSidebar} className="p-3 bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-2xl text-slate-400 hover:text-white transition-all shadow-lg active:scale-95">
-              {isSidebarOpen ? <ArrowLeft className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
-            <div className="flex items-center gap-3 text-sm font-black uppercase tracking-widest">
-              <span className="text-slate-600">CLIENT_ID</span>
-              <ChevronRight className="w-4 h-4 text-slate-800" />
-              <span className="text-slate-100 bg-slate-900 px-4 py-2 rounded-xl border border-slate-800">{activeClient?.name}</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-             <button disabled={loadingAi} className="flex items-center gap-3 bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3.5 rounded-2xl text-xs font-black tracking-widest uppercase transition-all shadow-2xl shadow-indigo-900/40 active:scale-95 disabled:opacity-50" onClick={handleAiInsight}>
-                {loadingAi ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />} Analista de IA
-             </button>
-             <button onClick={() => setIsChatOpen(!isChatOpen)} className={`p-3.5 rounded-2xl border transition-all shadow-xl ${isChatOpen ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'}`}>
-                <MessageSquare className="w-6 h-6" />
-             </button>
-          </div>
-        </header>
-        
-        <div className="flex-1 overflow-y-auto px-12 py-12 relative custom-scrollbar">
-          {aiInsight && (
-            <div className="mb-12 p-8 bg-indigo-600/5 border border-indigo-500/20 rounded-[2.5rem] flex gap-8 animate-in slide-in-from-top-6 duration-700 relative group overflow-hidden shadow-2xl">
-              <div className="absolute top-0 left-0 w-2 h-full bg-indigo-600 shadow-[0_0_20px_rgba(79,70,229,0.5)]"></div>
-              <div className="bg-indigo-600/10 p-5 rounded-3xl h-fit border border-indigo-500/20 shadow-inner">
-                <Sparkles className="w-8 h-8 text-indigo-400" />
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-4 mb-4">
-                   <h4 className="text-sm font-black text-indigo-400 uppercase tracking-[0.2em]">Correlação Estratégica AI</h4>
-                   <span className="text-[10px] bg-indigo-500/10 text-indigo-500 px-3 py-1 rounded-full font-black border border-indigo-500/30 uppercase">Gemini 3 Pro Active Thinking</span>
-                </div>
-                <div className="text-base text-slate-200 leading-relaxed font-medium whitespace-pre-wrap selection:bg-indigo-500/30">{aiInsight}</div>
-              </div>
-              <button onClick={() => setAiInsight(null)} className="shrink-0 text-slate-700 hover:text-white transition-colors p-2 hover:bg-slate-800 rounded-full h-fit"><X className="w-6 h-6" /></button>
-            </div>
-          )}
-          
-          <div className="max-w-[1600px] mx-auto">
-            {activePhase === 'dashboard' ? <Dashboard /> : activePhase === 'cases' ? <CasesManager /> : <PhaseView phase={activePhase as CTIPhase} />}
-          </div>
-        </div>
 
-        <div className={`fixed right-10 top-28 bottom-10 w-[420px] bg-slate-900 border border-slate-800 shadow-[0_30px_60px_rgba(0,0,0,0.6)] z-30 transition-all duration-500 flex flex-col rounded-[2.5rem] overflow-hidden ${isChatOpen ? 'translate-x-0 opacity-100 scale-100' : 'translate-x-full opacity-0 scale-95 pointer-events-none'}`}>
-           <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-800/20 backdrop-blur-md">
-              <div className="flex items-center gap-4">
-                 <div className="bg-indigo-600 p-2.5 rounded-2xl shadow-lg rotate-3"><MessageSquare className="w-5 h-5 text-white" /></div>
+      {/* Main Content */}
+      <main className={`flex-1 transition-all duration-300 ${isSidebarOpen ? 'ml-80' : 'ml-24'} p-6 lg:p-10 relative overflow-hidden`}>
+         {/* Top Bar */}
+         <div className="flex justify-between items-center mb-10">
+            <div className="flex items-center gap-4">
+               <button onClick={toggleSidebar} className="p-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 hover:text-white transition-colors">
+                  <Menu className="w-5 h-5" />
+               </button>
+               <div className="h-8 w-px bg-slate-800"></div>
+               
+               <div className="relative group">
+                  <button className="flex items-center gap-3 bg-slate-900 border border-slate-800 pl-4 pr-10 py-2.5 rounded-2xl text-sm font-bold text-slate-300 hover:border-slate-700 transition-all min-w-[200px]">
+                     <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                     {activeClient?.name || 'Selecione Organização'}
+                     <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                  </button>
+                  <div className="absolute top-full left-0 w-full mt-2 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-2 hidden group-hover:block z-50">
+                     {clients.map(c => (
+                        <button key={c.id} onClick={() => setActiveClientId(c.id)} className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-800 text-sm font-medium text-slate-300 hover:text-white transition-colors flex justify-between items-center">
+                           {c.name}
+                           {c.id === activeClientId && <CheckCircle className="w-4 h-4 text-emerald-500" />}
+                        </button>
+                     ))}
+                     <div className="h-px bg-slate-800 my-1"></div>
+                     <button onClick={() => { setEditingOrg(null); setIsOrgModalOpen(true); }} className="w-full text-left px-4 py-3 rounded-xl hover:bg-indigo-600/10 text-xs font-black uppercase tracking-widest text-indigo-400 hover:text-indigo-300 flex items-center gap-2">
+                        <Plus className="w-4 h-4" /> Nova Organização
+                     </button>
+                  </div>
+               </div>
+            </div>
+
+            <div className="flex gap-4">
+               <button 
+                  onClick={() => setIsChatOpen(!isChatOpen)}
+                  className={`flex items-center gap-3 px-6 py-2.5 rounded-2xl border transition-all shadow-lg ${isChatOpen ? 'bg-indigo-600 border-indigo-500 text-white shadow-indigo-900/20' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'}`}
+               >
+                  <Sparkles className="w-4 h-4" />
+                  <span className="text-xs font-black uppercase tracking-widest">Sentinel AI</span>
+               </button>
+            </div>
+         </div>
+
+         {/* Content Area */}
+         {activePhase === 'dashboard' && <Dashboard />}
+         {activePhase !== 'dashboard' && activePhase !== 'cases' && <PhaseView phase={activePhase} />}
+      </main>
+
+      {/* Floating Chat Window */}
+      {isChatOpen && (
+        <div className="fixed bottom-8 right-8 w-96 bg-slate-900 border border-slate-800 rounded-[2rem] shadow-2xl z-[100] overflow-hidden flex flex-col animate-in slide-in-from-bottom-10 fade-in duration-300 h-[600px]">
+           <div className="px-6 py-5 border-b border-slate-800 bg-slate-950 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                 <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center"><Sparkles className="w-4 h-4 text-white" /></div>
                  <div>
-                    <h3 className="text-sm font-black text-white uppercase tracking-wider">CTI Analyst</h3>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">Gemini 3 Pro Intelligence</p>
+                    <h3 className="font-bold text-white text-sm">Sentinel Assistant</h3>
+                    <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Online</p>
                  </div>
               </div>
-              <button onClick={() => setIsChatOpen(false)} className="p-2 hover:bg-slate-800 rounded-full text-slate-500 hover:text-white transition-all"><X className="w-5 h-5" /></button>
+              <button onClick={() => setIsChatOpen(false)} className="text-slate-500 hover:text-white"><X className="w-5 h-5" /></button>
            </div>
            
-           <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-950/40 custom-scrollbar">
-              {chatMessages.length === 0 && (
-                <div className="h-full flex flex-col items-center justify-center text-center px-10">
-                   <div className="w-20 h-20 bg-indigo-600/10 rounded-[2rem] flex items-center justify-center mb-8 border border-indigo-500/20">
-                      <Sparkles className="w-10 h-10 text-indigo-500" />
-                   </div>
-                   <p className="text-sm font-bold text-slate-400 leading-relaxed uppercase tracking-widest opacity-60">Assistente Sentinel Online</p>
-                   <p className="text-xs text-slate-500 mt-2">Como posso auxiliar no cruzamento de dados CTI hoje?</p>
-                </div>
-              )}
+           <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-900 custom-scrollbar" ref={chatScrollRef}>
+              <div className="flex gap-4">
+                 <div className="w-8 h-8 rounded-xl bg-indigo-600 flex-shrink-0 flex items-center justify-center"><Sparkles className="w-4 h-4 text-white" /></div>
+                 <div className="bg-slate-800 rounded-2xl rounded-tl-none p-4 border border-slate-700">
+                    <p className="text-sm text-slate-300 leading-relaxed">Olá! Sou sua IA de inteligência cibernética. Analiso todos os dados da {activeClient?.name} em tempo real. Como posso ajudar hoje?</p>
+                 </div>
+              </div>
+
               {chatMessages.map((msg, idx) => (
-                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                   <div className={`max-w-[90%] p-4 rounded-3xl text-sm leading-relaxed shadow-xl ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-slate-800/80 text-slate-100 rounded-tl-none border border-slate-700 backdrop-blur-sm'}`}>
-                      {msg.content}
-                   </div>
-                </div>
+                 <div key={idx} className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                    <div className={`w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center ${msg.role === 'user' ? 'bg-slate-700' : 'bg-indigo-600'}`}>
+                       {msg.role === 'user' ? <User className="w-4 h-4 text-slate-300" /> : <Sparkles className="w-4 h-4 text-white" />}
+                    </div>
+                    <div className={`rounded-2xl p-4 border max-w-[80%] ${msg.role === 'user' ? 'bg-slate-800 border-slate-700 rounded-tr-none' : 'bg-indigo-900/20 border-indigo-500/20 rounded-tl-none'}`}>
+                       <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                    </div>
+                 </div>
               ))}
+              
               {isAiTyping && (
-                <div className="flex justify-start">
-                   <div className="bg-slate-800/50 p-4 rounded-3xl rounded-tl-none border border-slate-800 shadow-xl">
-                      <div className="flex gap-2">
-                         <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"></div>
-                         <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce delay-150"></div>
-                         <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce delay-300"></div>
-                      </div>
-                   </div>
-                </div>
+                 <div className="flex gap-4">
+                    <div className="w-8 h-8 rounded-xl bg-indigo-600 flex-shrink-0 flex items-center justify-center"><Sparkles className="w-4 h-4 text-white" /></div>
+                    <div className="bg-slate-800 rounded-2xl rounded-tl-none p-4 border border-slate-700 flex items-center gap-2">
+                       <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce"></div>
+                       <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce delay-100"></div>
+                       <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce delay-200"></div>
+                    </div>
+                 </div>
               )}
            </div>
 
-           <div className="p-6 bg-slate-900/80 backdrop-blur-xl border-t border-slate-800">
-              <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="relative">
+           <div className="p-4 bg-slate-950 border-t border-slate-800">
+              <div className="relative">
                  <input 
                     type="text" 
                     value={currentChatInput}
-                    onChange={(e) => setCurrentChatInput(e.target.value)}
-                    placeholder="Analisar riscos para este cliente..." 
-                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 pl-6 pr-14 text-sm text-white focus:border-indigo-500 transition-all outline-none shadow-inner"
+                    onChange={e => setCurrentChatInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
+                    placeholder="Faça uma pergunta sobre os dados..." 
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-4 pr-12 py-4 text-sm text-white focus:border-indigo-500 outline-none"
                  />
-                 <button type="submit" disabled={!currentChatInput.trim() || isAiTyping} className="absolute right-2.5 top-2.5 p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 transition-all shadow-lg active:scale-90 disabled:opacity-30 disabled:grayscale">
-                    <Send className="w-5 h-5" />
+                 <button 
+                    onClick={handleSendMessage}
+                    disabled={!currentChatInput.trim() || isAiTyping}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-indigo-600 rounded-lg text-white hover:bg-indigo-500 disabled:opacity-50 disabled:hover:bg-indigo-600 transition-colors"
+                 >
+                    <Send className="w-4 h-4" />
                  </button>
-              </form>
+              </div>
            </div>
         </div>
-      </main>
+      )}
+
+      {/* Modals */}
+      {isPirModalOpen && <PirModal />}
+      {isSourceModalOpen && <SourceModal />}
+      {isAnalysisModalOpen && <AnalysisModal />}
+      {isDisseminationModalOpen && <DisseminationModal />}
+      {isOrgModalOpen && <OrgModal />}
+      {confirmState && <ConfirmationModal />}
     </div>
   );
 }

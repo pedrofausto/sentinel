@@ -20,6 +20,7 @@ export interface IntelligenceSource {
   id: string;
   pirId: string; // Relationship with PIR
   name: string;
+  description?: string; // Detailed report/context about the source
   type: 'Internal' | 'OSINT' | 'FeedComercial' | 'FeedAberto' | 'DarkWeb';
   credibility: 'A' | 'B' | 'C' | 'D' | 'E' | 'F'; // Credibility scale A-F
   reliability: 'A' | 'B' | 'C' | 'D' | 'E' | 'F'; // Reliability scale A-F
@@ -41,8 +42,10 @@ export interface MetricRecord {
 export interface DisseminationLog {
   id: string;
   pirId: string; // Vínculo com PIR (Um PIR pode ter múltiplos logs)
+  reportId?: string; // Vínculo opcional com o Relatório de Análise (Obrigatório se vier de uma análise)
   date: string;
   type: 'Strategic' | 'Operational' | 'Tactical';
+  status: 'Pending' | 'Disseminated' | 'Acknowledged'; // Status do fluxo de disseminação
   reportName: string;
   deliveryChannel?: string; // Canal de Envio (Email)
   notifiedTeam?: string;    // Time Notificado
