@@ -1562,16 +1562,7 @@ export default function App() {
                         </button>
                      ))}
                      <div className="h-px bg-slate-800 my-1"></div>
-     <button
-        type="button"
-        onClick={(e) => {
-           e.preventDefault();
-           e.stopPropagation();
-           setEditingOrg(null);
-           setIsOrgModalOpen(true);
-        }}
-        className="w-full text-left px-4 py-3 rounded-xl hover:bg-indigo-600/10 text-xs font-black uppercase tracking-widest text-indigo-400 hover:text-indigo-300 flex items-center gap-2"
-     >
+                     <button onClick={() => { setEditingOrg(null); setIsOrgModalOpen(true); }} className="w-full text-left px-4 py-3 rounded-xl hover:bg-indigo-600/10 text-xs font-black uppercase tracking-widest text-indigo-400 hover:text-indigo-300 flex items-center gap-2">
                         <Plus className="w-4 h-4" /> Nova Organização
                      </button>
                   </div>
