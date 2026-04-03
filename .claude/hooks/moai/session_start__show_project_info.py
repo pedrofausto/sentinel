@@ -16,6 +16,7 @@ Enhanced Features:
 
 import json
 import logging
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -128,8 +129,8 @@ except ImportError:
                         yaml_end = content.find("---", 3)
                         if yaml_end > 0:
                             yaml_content = content[3:yaml_end]
-                            # Check for status: completed (with or without quotes)
-                            if "status: completed" in yaml_content or 'status: "completed"' in yaml_content:
+                            # Check for status: completed (with or without quotes, and allowing comments)
+                            if re.search(r'^status:\s*["\']?completed["\']?\s*(?:#.*)?$', yaml_content, re.MULTILINE):
                                 completed += 1
                 except (OSError, UnicodeDecodeError):
                     # File read failure or encoding error - considered incomplete
