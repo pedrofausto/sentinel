@@ -89,8 +89,8 @@ except ImportError:
     import yaml as yaml_fallback
 
     def get_cached_config():
-        # FIX: Use absolute path from find_project_root() to ensure correct directory
-        project_root = find_project_root()
+        # FIX: Use absolute path from find_project_root().resolve() to ensure correct directory
+        project_root = find_project_root().resolve()
         config_path = project_root / ".moai" / "config" / "config.yaml"
         if config_path.exists():
             try:
@@ -102,8 +102,8 @@ except ImportError:
 
     def get_cached_spec_progress():
         """Get SPEC progress information - FIXED to use YAML frontmatter parsing"""
-        # FIX #3: Use absolute path from find_project_root() to ensure current project only
-        project_root = find_project_root()
+        # FIX #3: Use absolute path from find_project_root().resolve() to ensure current project only
+        project_root = find_project_root().resolve()
         specs_dir = project_root / ".moai" / "specs"
 
         if not specs_dir.exists():
@@ -209,7 +209,7 @@ def check_git_initialized() -> bool:
         bool: True if .git directory exists, False otherwise
     """
     try:
-        project_root = find_project_root()
+        project_root = find_project_root().resolve()
         git_dir = project_root / ".git"
         return git_dir.exists() and git_dir.is_dir()
     except Exception:
@@ -383,8 +383,6 @@ def _parse_version(version_str: str) -> tuple[int, ...]:
         Tuple of integers for comparison (e.g., (0, 25, 4))
     """
     try:
-        import re
-
         clean = version_str.lstrip("v")
         parts = [int(x) for x in re.split(r"[^\d]+", clean) if x.isdigit()]
         return tuple(parts) if parts else (0,)
@@ -429,7 +427,7 @@ def check_version_update() -> tuple[str, bool]:
             return "(latest)", False
 
         # Try to load cached PyPI version from Phase 1
-        version_cache_file = find_project_root() / ".moai" / "cache" / "version-check.json"
+        version_cache_file = find_project_root().resolve() / ".moai" / "cache" / "version-check.json"
         latest_version = None
 
         if version_cache_file.exists():
@@ -574,7 +572,7 @@ def load_user_personalization() -> dict:
         from src.moai_adk.core.language_config_resolver import get_resolver
 
         # Get resolver instance and resolve configuration
-        resolver = get_resolver(str(find_project_root()))
+        resolver = get_resolver(str(find_project_root().resolve()))
         config = resolver.resolve_config()
 
         # FIX #5: Check if USER_NAME is a template variable or empty
@@ -598,7 +596,7 @@ def load_user_personalization() -> dict:
         template_vars = resolver.export_template_variables(config)
 
         # Store resolved configuration for session-wide access
-        personalization_cache_file = find_project_root() / ".moai" / "cache" / "personalization.json"
+        personalization_cache_file = find_project_root().resolve() / ".moai" / "cache" / "personalization.json"
         try:
             personalization_cache_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -670,7 +668,7 @@ def load_user_personalization() -> dict:
         }
 
         # Store for session-wide access
-        personalization_cache_file = find_project_root() / ".moai" / "cache" / "personalization.json"
+        personalization_cache_file = find_project_root().resolve() / ".moai" / "cache" / "personalization.json"
         try:
             personalization_cache_file.parent.mkdir(parents=True, exist_ok=True)
             personalization_cache_file.write_text(json.dumps(personalization, ensure_ascii=False, indent=2))
