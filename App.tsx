@@ -1067,6 +1067,25 @@ export default function App() {
 
   const PhaseView = ({ phase }: { phase: CTIPhase }) => {
     const config = PHASE_CONFIG[phase];
+
+    const sourcesByPirId = useMemo(() => {
+      if (!activeClient) return {};
+      return activeClient.phases.collection.sources.reduce((acc, s) => {
+        if (!acc[s.pirId]) acc[s.pirId] = [];
+        acc[s.pirId].push(s);
+        return acc;
+      }, {} as Record<string, IntelligenceSource[]>);
+    }, [activeClient?.phases.collection.sources]);
+
+    const logsByPirId = useMemo(() => {
+      if (!activeClient) return {};
+      return activeClient.phases.dissemination.logs.reduce((acc, l) => {
+        if (!acc[l.pirId]) acc[l.pirId] = [];
+        acc[l.pirId].push(l);
+        return acc;
+      }, {} as Record<string, DisseminationLog[]>);
+    }, [activeClient?.phases.dissemination.logs]);
+
     if (!activeClient) return null;
 
     const renderPhaseContent = () => {
@@ -1098,7 +1117,7 @@ export default function App() {
           return (
             <div className="space-y-8">
               {activeClient.phases.planning.pirs.map(pir => {
-                const pirSources = activeClient.phases.collection.sources.filter(s => s.pirId === pir.id);
+                const pirSources = sourcesByPirId[pir.id] || [];
                 return (
                   <div key={pir.id} className="bg-slate-900/40 border border-slate-800/50 rounded-3xl p-6 shadow-xl">
                     <div className="flex justify-between items-center mb-6 border-b border-slate-800/50 pb-4">
@@ -1185,7 +1204,7 @@ export default function App() {
           return (
             <div className="space-y-8">
               {activeClient.phases.planning.pirs.map(pir => {
-                const pirLogs = activeClient.phases.dissemination.logs.filter(l => l.pirId === pir.id);
+                const pirLogs = logsByPirId[pir.id] || [];
                 return (
                   <div key={pir.id} className="bg-slate-900/40 border border-slate-800/50 rounded-3xl p-6 shadow-xl">
                     <div className="flex justify-between items-center mb-6 border-b border-slate-800/50 pb-4">
