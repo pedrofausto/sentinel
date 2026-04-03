@@ -298,7 +298,6 @@ def get_git_info() -> Dict[str, Any]:
         head_commit = results.get("head_commit", "")
         last_commit = results.get("last_commit", "")
 
-        # FIX: Detect detached HEAD state
         if not branch and head_ref == "HEAD":
             # Detached HEAD state - show commit hash
             branch = f"HEAD detached at {head_commit}"
