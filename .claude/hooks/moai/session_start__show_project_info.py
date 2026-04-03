@@ -16,6 +16,7 @@ Enhanced Features:
 
 import json
 import logging
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -114,6 +115,9 @@ except ImportError:
 
             # FIX: Parse YAML frontmatter to check for status: completed
             completed = 0
+            # Robust regex for status: completed (handling quotes, comments, and whitespace)
+            status_pattern = re.compile(r'^\s*status:\s*["\']?completed["\']?\s*(?:#.*)?$', re.MULTILINE)
+
             for folder in spec_folders:
                 spec_file = folder / "spec.md"
                 if not spec_file.exists():
@@ -128,8 +132,8 @@ except ImportError:
                         yaml_end = content.find("---", 3)
                         if yaml_end > 0:
                             yaml_content = content[3:yaml_end]
-                            # Check for status: completed (with or without quotes)
-                            if "status: completed" in yaml_content or 'status: "completed"' in yaml_content:
+                            # Check for status: completed
+                            if status_pattern.search(yaml_content):
                                 completed += 1
                 except (OSError, UnicodeDecodeError):
                     # File read failure or encoding error - considered incomplete
