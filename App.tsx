@@ -1345,16 +1345,14 @@ export default function App() {
       { label: 'Alertas Disseminados', value: activeClient.phases.dissemination.logs.filter(l => l.status === 'Disseminated' || l.status === 'Acknowledged').length, total: activeClient.phases.dissemination.logs.length, color: 'purple', icon: Share2 },
     ];
 
-    const alertsData = useMemo(() => {
-      const counts: Record<string, number> = {};
-      activeClient.phases.dissemination.logs.forEach(log => {
-        const date = log.date.substring(5); // MM-DD
-        counts[date] = (counts[date] || 0) + 1;
-      });
-      return Object.entries(counts)
-        .map(([name, value]) => ({ name, value }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-    }, [activeClient.phases.dissemination.logs]);
+    const alertCounts: Record<string, number> = {};
+    for (const log of activeClient.phases.dissemination.logs) {
+      const date = log.date.substring(5); // MM-DD
+      alertCounts[date] = (alertCounts[date] || 0) + 1;
+    }
+    const alertsData = Object.entries(alertCounts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     const responseTimeData = activeClient.metrics.map(m => {
         const incidentTime = m.incidentDate ? new Date(m.incidentDate).getTime() : new Date(m.discoveryDate).getTime();
