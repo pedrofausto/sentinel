@@ -16,6 +16,7 @@ Enhanced Features:
 
 import json
 import logging
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -114,6 +115,8 @@ except ImportError:
 
             # FIX: Parse YAML frontmatter to check for status: completed
             completed = 0
+            status_pattern = re.compile(r'^\s*status:\s*["\']?completed["\']?\s*(?:#.*)?$', re.MULTILINE)
+
             for folder in spec_folders:
                 spec_file = folder / "spec.md"
                 if not spec_file.exists():
@@ -128,8 +131,8 @@ except ImportError:
                         yaml_end = content.find("---", 3)
                         if yaml_end > 0:
                             yaml_content = content[3:yaml_end]
-                            # Check for status: completed (with or without quotes)
-                            if "status: completed" in yaml_content or 'status: "completed"' in yaml_content:
+                            # Check for status: completed (robust regex check)
+                            if status_pattern.search(yaml_content):
                                 completed += 1
                 except (OSError, UnicodeDecodeError):
                     # File read failure or encoding error - considered incomplete
@@ -379,8 +382,6 @@ def _parse_version(version_str: str) -> tuple[int, ...]:
         Tuple of integers for comparison (e.g., (0, 25, 4))
     """
     try:
-        import re
-
         clean = version_str.lstrip("v")
         parts = [int(x) for x in re.split(r"[^\d]+", clean) if x.isdigit()]
         return tuple(parts) if parts else (0,)
