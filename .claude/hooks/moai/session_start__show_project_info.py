@@ -575,7 +575,17 @@ def load_user_personalization() -> dict:
 
         # FIX #5: Check if USER_NAME is a template variable or empty
         user_name = config.get("user_name", "")
-        has_valid_name = user_name and not user_name.startswith("{{") and not user_name.endswith("}}")
+        if isinstance(user_name, str):
+            user_name = user_name.strip()
+        else:
+            user_name = ""
+
+        has_valid_name = bool(user_name) and not (
+            user_name.startswith("{{")
+            or user_name.endswith("}}")
+            or user_name.startswith("${")
+            or user_name.endswith("}")
+        )
 
         # Build personalization info using resolved configuration
         personalization = {
@@ -632,7 +642,17 @@ def load_user_personalization() -> dict:
             conversation_lang = config.get("language", {}).get("conversation_language", "en")
 
         # FIX #5: Check if USER_NAME is a template variable or empty
-        has_valid_name = user_name and not user_name.startswith("{{") and not user_name.endswith("}}")
+        if isinstance(user_name, str):
+            user_name = user_name.strip()
+        else:
+            user_name = ""
+
+        has_valid_name = bool(user_name) and not (
+            user_name.startswith("{{")
+            or user_name.endswith("}}")
+            or user_name.startswith("${")
+            or user_name.endswith("}")
+        )
 
         # Get language name
         lang_name_map = {
