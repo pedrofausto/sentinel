@@ -241,6 +241,12 @@ export default function App() {
 
   const getContextString = () => {
     if (!activeClient) return "Nenhum cliente ativo.";
+
+    const pirLookup = activeClient.phases.planning.pirs.reduce((acc, p) => {
+      acc[p.id] = p.title;
+      return acc;
+    }, {} as Record<string, string>);
+
     return JSON.stringify({
       organizacao: {
         nome: activeClient.name,
@@ -260,14 +266,18 @@ export default function App() {
         credibilidade: s.credibility,
         confiabilidade: s.reliability
       })),
-      historico_casos_incidentes: activeClient.metrics.map(m => ({
-        foi_incidente: m.hasIncident,
-        impacto: m.impactScale,
-        mitigado: m.incidentPrevented,
-        mapeado_previamente: m.wasPreviouslyReported,
-        pir_associado: activeClient.phases.planning.pirs.find(p => p.id === m.pirId)?.title,
-        mttd_horas: m.incidentDate ? (new Date(m.discoveryDate).getTime() - new Date(m.incidentDate).getTime()) / 3600000 : 0
-      })),
+      historico_casos_incidentes: activeClient.metrics.map(m => {
+        const incidentTimestamp = m.incidentDate ? new Date(m.incidentDate).getTime() : 0;
+        const discoveryTimestamp = new Date(m.discoveryDate).getTime();
+        return {
+          foi_incidente: m.hasIncident,
+          impacto: m.impactScale,
+          mitigado: m.incidentPrevented,
+          mapeado_previamente: m.wasPreviouslyReported,
+          pir_associado: pirLookup[m.pirId],
+          mttd_horas: incidentTimestamp ? (discoveryTimestamp - incidentTimestamp) / 3600000 : 0
+        };
+      }),
       relatorios_analise: activeClient.phases.analysis.reports.map(r => ({
         titulo: r.title,
         tipo: r.type,
@@ -279,7 +289,7 @@ export default function App() {
         canal: l.deliveryChannel,
         time: l.notifiedTeam,
         obs: l.observations,
-        vinc_pir: activeClient.phases.planning.pirs.find(p => p.id === l.pirId)?.title
+        vinc_pir: pirLookup[l.pirId]
       }))
     }, null, 2);
   };
@@ -1067,6 +1077,27 @@ export default function App() {
 
   const PhaseView = ({ phase }: { phase: CTIPhase }) => {
     const config = PHASE_CONFIG[phase];
+
+    const sourcesByPirId = useMemo(() => {
+      const map: Record<string, IntelligenceSource[]> = {};
+      if (!activeClient) return map;
+      activeClient.phases.collection.sources.forEach(s => {
+        if (!map[s.pirId]) map[s.pirId] = [];
+        map[s.pirId].push(s);
+      });
+      return map;
+    }, [activeClient?.phases.collection.sources]);
+
+    const logsByPirId = useMemo(() => {
+      const map: Record<string, DisseminationLog[]> = {};
+      if (!activeClient) return map;
+      activeClient.phases.dissemination.logs.forEach(l => {
+        if (!map[l.pirId]) map[l.pirId] = [];
+        map[l.pirId].push(l);
+      });
+      return map;
+    }, [activeClient?.phases.dissemination.logs]);
+
     if (!activeClient) return null;
 
     const renderPhaseContent = () => {
@@ -1098,7 +1129,7 @@ export default function App() {
           return (
             <div className="space-y-8">
               {activeClient.phases.planning.pirs.map(pir => {
-                const pirSources = activeClient.phases.collection.sources.filter(s => s.pirId === pir.id);
+                const pirSources = sourcesByPirId[pir.id] || [];
                 return (
                   <div key={pir.id} className="bg-slate-900/40 border border-slate-800/50 rounded-3xl p-6 shadow-xl">
                     <div className="flex justify-between items-center mb-6 border-b border-slate-800/50 pb-4">
@@ -1185,7 +1216,7 @@ export default function App() {
           return (
             <div className="space-y-8">
               {activeClient.phases.planning.pirs.map(pir => {
-                const pirLogs = activeClient.phases.dissemination.logs.filter(l => l.pirId === pir.id);
+                const pirLogs = logsByPirId[pir.id] || [];
                 return (
                   <div key={pir.id} className="bg-slate-900/40 border border-slate-800/50 rounded-3xl p-6 shadow-xl">
                     <div className="flex justify-between items-center mb-6 border-b border-slate-800/50 pb-4">
@@ -1314,13 +1345,16 @@ export default function App() {
       { label: 'Alertas Disseminados', value: activeClient.phases.dissemination.logs.filter(l => l.status === 'Disseminated' || l.status === 'Acknowledged').length, total: activeClient.phases.dissemination.logs.length, color: 'purple', icon: Share2 },
     ];
 
-    const alertsData = activeClient.phases.dissemination.logs.reduce((acc: any[], log) => {
-       const date = log.date.substring(5); // MM-DD
-       const existing = acc.find(a => a.name === date);
-       if (existing) existing.value++;
-       else acc.push({ name: date, value: 1 });
-       return acc;
-    }, []).sort((a: any, b: any) => a.name.localeCompare(b.name));
+    const alertsData = useMemo(() => {
+      const counts: Record<string, number> = {};
+      activeClient.phases.dissemination.logs.forEach(log => {
+        const date = log.date.substring(5); // MM-DD
+        counts[date] = (counts[date] || 0) + 1;
+      });
+      return Object.entries(counts)
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }, [activeClient.phases.dissemination.logs]);
 
     const responseTimeData = activeClient.metrics.map(m => {
         const incidentTime = m.incidentDate ? new Date(m.incidentDate).getTime() : new Date(m.discoveryDate).getTime();
@@ -1562,16 +1596,7 @@ export default function App() {
                         </button>
                      ))}
                      <div className="h-px bg-slate-800 my-1"></div>
-     <button
-        type="button"
-        onClick={(e) => {
-           e.preventDefault();
-           e.stopPropagation();
-           setEditingOrg(null);
-           setIsOrgModalOpen(true);
-        }}
-        className="w-full text-left px-4 py-3 rounded-xl hover:bg-indigo-600/10 text-xs font-black uppercase tracking-widest text-indigo-400 hover:text-indigo-300 flex items-center gap-2"
-     >
+                     <button onClick={() => { setEditingOrg(null); setIsOrgModalOpen(true); }} className="w-full text-left px-4 py-3 rounded-xl hover:bg-indigo-600/10 text-xs font-black uppercase tracking-widest text-indigo-400 hover:text-indigo-300 flex items-center gap-2">
                         <Plus className="w-4 h-4" /> Nova Organização
                      </button>
                   </div>
