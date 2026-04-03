@@ -16,6 +16,7 @@ Enhanced Features:
 
 import json
 import logging
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -88,8 +89,8 @@ except ImportError:
     import yaml as yaml_fallback
 
     def get_cached_config():
-        # FIX: Use absolute path from find_project_root() to ensure correct directory
-        project_root = find_project_root()
+        # FIX: Use absolute path from find_project_root().resolve() to ensure correct directory
+        project_root = find_project_root().resolve()
         config_path = project_root / ".moai" / "config" / "config.yaml"
         if config_path.exists():
             try:
@@ -101,8 +102,8 @@ except ImportError:
 
     def get_cached_spec_progress():
         """Get SPEC progress information - FIXED to use YAML frontmatter parsing"""
-        # FIX #3: Use absolute path from find_project_root() to ensure current project only
-        project_root = find_project_root()
+        # FIX #3: Use absolute path from find_project_root().resolve() to ensure current project only
+        project_root = find_project_root().resolve()
         specs_dir = project_root / ".moai" / "specs"
 
         if not specs_dir.exists():
@@ -114,6 +115,9 @@ except ImportError:
 
             # FIX: Parse YAML frontmatter to check for status: completed
             completed = 0
+            # Robust regex for status: completed (handling quotes, comments, and whitespace)
+            status_pattern = re.compile(r'^\s*status:\s*["\']?completed["\']?\s*(?:#.*)?$', re.MULTILINE)
+
             for folder in spec_folders:
                 spec_file = folder / "spec.md"
                 if not spec_file.exists():
@@ -128,8 +132,8 @@ except ImportError:
                         yaml_end = content.find("---", 3)
                         if yaml_end > 0:
                             yaml_content = content[3:yaml_end]
-                            # Check for status: completed (with or without quotes)
-                            if "status: completed" in yaml_content or 'status: "completed"' in yaml_content:
+                            # Check for status: completed
+                            if status_pattern.search(yaml_content):
                                 completed += 1
                 except (OSError, UnicodeDecodeError):
                     # File read failure or encoding error - considered incomplete
@@ -205,7 +209,7 @@ def check_git_initialized() -> bool:
         bool: True if .git directory exists, False otherwise
     """
     try:
-        project_root = find_project_root()
+        project_root = find_project_root().resolve()
         git_dir = project_root / ".git"
         return git_dir.exists() and git_dir.is_dir()
     except Exception:
@@ -294,7 +298,6 @@ def get_git_info() -> Dict[str, Any]:
         head_commit = results.get("head_commit", "")
         last_commit = results.get("last_commit", "")
 
-        # FIX: Detect detached HEAD state
         if not branch and head_ref == "HEAD":
             # Detached HEAD state - show commit hash
             branch = f"HEAD detached at {head_commit}"
@@ -379,8 +382,6 @@ def _parse_version(version_str: str) -> tuple[int, ...]:
         Tuple of integers for comparison (e.g., (0, 25, 4))
     """
     try:
-        import re
-
         clean = version_str.lstrip("v")
         parts = [int(x) for x in re.split(r"[^\d]+", clean) if x.isdigit()]
         return tuple(parts) if parts else (0,)
@@ -425,7 +426,7 @@ def check_version_update() -> tuple[str, bool]:
             return "(latest)", False
 
         # Try to load cached PyPI version from Phase 1
-        version_cache_file = find_project_root() / ".moai" / "cache" / "version-check.json"
+        version_cache_file = find_project_root().resolve() / ".moai" / "cache" / "version-check.json"
         latest_version = None
 
         if version_cache_file.exists():
@@ -570,12 +571,22 @@ def load_user_personalization() -> dict:
         from src.moai_adk.core.language_config_resolver import get_resolver
 
         # Get resolver instance and resolve configuration
-        resolver = get_resolver(str(find_project_root()))
+        resolver = get_resolver(str(find_project_root().resolve()))
         config = resolver.resolve_config()
 
         # FIX #5: Check if USER_NAME is a template variable or empty
         user_name = config.get("user_name", "")
-        has_valid_name = user_name and not user_name.startswith("{{") and not user_name.endswith("}}")
+        if isinstance(user_name, str):
+            user_name = user_name.strip()
+        else:
+            user_name = ""
+
+        has_valid_name = bool(user_name) and not (
+            user_name.startswith("{{")
+            or user_name.endswith("}}")
+            or user_name.startswith("${")
+            or user_name.endswith("}")
+        )
 
         # Build personalization info using resolved configuration
         personalization = {
@@ -594,7 +605,7 @@ def load_user_personalization() -> dict:
         template_vars = resolver.export_template_variables(config)
 
         # Store resolved configuration for session-wide access
-        personalization_cache_file = find_project_root() / ".moai" / "cache" / "personalization.json"
+        personalization_cache_file = find_project_root().resolve() / ".moai" / "cache" / "personalization.json"
         try:
             personalization_cache_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -632,7 +643,17 @@ def load_user_personalization() -> dict:
             conversation_lang = config.get("language", {}).get("conversation_language", "en")
 
         # FIX #5: Check if USER_NAME is a template variable or empty
-        has_valid_name = user_name and not user_name.startswith("{{") and not user_name.endswith("}}")
+        if isinstance(user_name, str):
+            user_name = user_name.strip()
+        else:
+            user_name = ""
+
+        has_valid_name = bool(user_name) and not (
+            user_name.startswith("{{")
+            or user_name.endswith("}}")
+            or user_name.startswith("${")
+            or user_name.endswith("}")
+        )
 
         # Get language name
         lang_name_map = {
@@ -666,7 +687,7 @@ def load_user_personalization() -> dict:
         }
 
         # Store for session-wide access
-        personalization_cache_file = find_project_root() / ".moai" / "cache" / "personalization.json"
+        personalization_cache_file = find_project_root().resolve() / ".moai" / "cache" / "personalization.json"
         try:
             personalization_cache_file.parent.mkdir(parents=True, exist_ok=True)
             personalization_cache_file.write_text(json.dumps(personalization, ensure_ascii=False, indent=2))
