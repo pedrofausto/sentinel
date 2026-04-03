@@ -1079,23 +1079,21 @@ export default function App() {
     const config = PHASE_CONFIG[phase];
 
     const sourcesByPirId = useMemo(() => {
-      const map: Record<string, IntelligenceSource[]> = {};
-      if (!activeClient) return map;
-      activeClient.phases.collection.sources.forEach(s => {
-        if (!map[s.pirId]) map[s.pirId] = [];
-        map[s.pirId].push(s);
-      });
-      return map;
+      if (!activeClient) return {};
+      return activeClient.phases.collection.sources.reduce((acc, s) => {
+        if (!acc[s.pirId]) acc[s.pirId] = [];
+        acc[s.pirId].push(s);
+        return acc;
+      }, {} as Record<string, IntelligenceSource[]>);
     }, [activeClient?.phases.collection.sources]);
 
     const logsByPirId = useMemo(() => {
-      const map: Record<string, DisseminationLog[]> = {};
-      if (!activeClient) return map;
-      activeClient.phases.dissemination.logs.forEach(l => {
-        if (!map[l.pirId]) map[l.pirId] = [];
-        map[l.pirId].push(l);
-      });
-      return map;
+      if (!activeClient) return {};
+      return activeClient.phases.dissemination.logs.reduce((acc, l) => {
+        if (!acc[l.pirId]) acc[l.pirId] = [];
+        acc[l.pirId].push(l);
+        return acc;
+      }, {} as Record<string, DisseminationLog[]>);
     }, [activeClient?.phases.dissemination.logs]);
 
     if (!activeClient) return null;
